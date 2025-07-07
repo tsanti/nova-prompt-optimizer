@@ -5,7 +5,7 @@ A Python SDK for optimizing prompts for Nova.
 ## Table of contents
 * [Installation](#installation)
 * [Quick Start: Facility Support Analyzer Dataset](#quick-start)
-* [Optimization Recommendations](#set-up)
+* [Optimization Recommendations](#optimization-recommendations)
 * [Core Concepts](#core-concepts)
   * [Input Adapters](#input-adapters)
     * [1. Dataset Adapter](#1-dataset-adapter)
