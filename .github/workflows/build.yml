@@ -42,7 +42,7 @@ jobs:
             echo "requirements.txt not found"
             exit 1
           fi
-          if grep -E "(^-|^git\+|^http)" requirements.txt; then
+          if grep -E "(^-|^git\+|^https?://)" requirements.txt; then
             echo "Potentially unsafe dependencies detected"
             exit 1
           fi  
