@@ -6,5 +6,5 @@ dspy
 numpy==2.2.6
 virtualenv==20.26.6
 urllib3==2.5.0
-setuptools==78.1.1
+setuptools==80.9.0
 h11==0.16.0
