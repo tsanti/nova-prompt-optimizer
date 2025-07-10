@@ -2,10 +2,10 @@
 
 A Python SDK for optimizing prompts for Nova.
 
-## Table of contents
+## 📚 Table of contents
 * [Installation](#installation)
 * [Pre-Requisites](#pre-requisites)
-* [Quick Start: Facility Support Analyzer Dataset](#quick-start)
+* [Quick Start: Facility Support Analyzer Dataset](#-quick-start)
 * [Core Concepts](#core-concepts)
   * [Input Adapters](#input-adapters)
     * [1. Prompt Adapter](#1-prompt-adapter)
@@ -17,6 +17,7 @@ A Python SDK for optimizing prompts for Nova.
     * [NovaPromptOptimizer](#novapromptoptimizer)
   * [Evaluator](#evaluator)
 * [Optimization Recommendations](#optimization-recommendations)
+* [Preview Status](#-preview-status)
 * [Acknowledgements](#acknowledgements)
 
 ## Installation
@@ -45,10 +46,10 @@ export AWS_SECRET_ACCESS_KEY="..."
 2. Click "Manage model access"
 3. Choose Amazon as provider and Nova models
 4. Click "Request access"
-5. Wait for approval (instant in most cases
+5. Wait for approval (instant in most cases)
 
 
-## Quick Start
+## 🏁 Quick Start
 ### Facility Support Analyzer Dataset
 The Facility Support Analyzer dataset consists of emails that are to be classified based on category, urgency and sentiment.
 
@@ -111,7 +112,7 @@ inference_adapter = BedrockInferenceAdapter(region_name="us-east-1", rate_limit=
 Call the model using the parameters
 ```python
 # Call the model with the passed parametrs
-.call_model(model_id: str, system_prompt: str, messages: List[Dict[str, str]], inf_config: Dict[str, Any])
+inference_output = inference_adapter.call_model(model_id: str, system_prompt: str, messages: List[Dict[str, str]], inf_config: Dict[str, Any])
 ```
 
 The Inference Adapter accepts the `system_prompt` as a string.
@@ -149,7 +150,19 @@ Learn More about the Dataset Adapter [here](docs/DatasetAdapter.md)
 ### 4. Metric Adapter
 **Responsibility:** Ability to load custom metrics and apply them on inference output and ground truth
 
+**Metric Adapter Class**
+```python
+class MetricAdapter():
+    def apply(self, y_pred: Any, y_true: Any) -> float:
+        pass
+
+    def batch_apply(self, y_preds: List[Any], y_trues: List[Any]) -> float:
+        pass
+```
+
 **Sample Custom Metric Adapter Initialization**
+Let's create a Custom metric adapter that parses the inference output for the answer between `<answer> </answer>` tags and then performs an exact match metric.
+
 ```python
 from amzn_nova_prompt_optimizer.core.input_adapters.metric_adapter import MetricAdapter
 from typing import List, Any, Dict
@@ -158,20 +171,24 @@ import json
 
 class CustomMetric(MetricAdapter):
     def _parse_answer(self, model_output):
+        # Parse Answer between tags
         match = re.search(r"<answer>(.*?)</answer>", model_output)
         if not match:
             return "Choice not found"
         return match.group(1).lower().strip()
 
     def _calculate_metrics(self, y_pred: Any, y_true: Any) -> Dict:
+        # Peform Exact Match
         pred = self._parse_answer(y_pred)
         ground_truth = self._parse_answer(y_true)
         return int(pred == ground_truth)
 
     def apply(self, y_pred: Any, y_true: Any):
+        # Apply to one row of the dataset
         return self._calculate_metrics(y_pred, y_true)
 
     def batch_apply(self, y_preds: List[Any], y_trues: List[Any]):
+        # Apply to the whole dataset
         evals = []
         for y_pred, y_true in zip(y_preds, y_trues):
             evals.append(self.apply(y_pred, y_true))
@@ -183,14 +200,24 @@ metric_adapter = CustomMetric()
 **Core Functions**
 Apply the metric on a prediction and ground_truth one row at a time
 ```python
+y_pred = "The question asks ...... <answer>3</answer>"
+y_true = "<answer>3</answer>"
+
 # Apply the metric on a prediction and ground_truth
-.apply(y_pred: Any, y_true: Any)
+score = metric_adapter.apply(y_pred, y_true)
+
+# score = 1
 ```
 
 Apply the metric on a list of prediction and ground_truth i.e. for the dataset
 ```python
+y_preds = ["The question asks ...... <answer>3</answer>", "The question asks ...... <answer>5</answer>"]
+y_trues = ["<answer>3</answer>", "<answer>4</answer>"]
+
 # Apply the metric on a list of prediction and ground_truth
-.batch_apply(y_preds: List[Any], y_trues: List[Any])
+aggregeate_score = metric_adapter.batch_apply(y_preds, y_trues)
+
+# aggregeate_score = 0.5
 ```
 
 
@@ -265,19 +292,19 @@ nova_mp_score = evaluator.aggregate_score(model_id="us.amazon.nova-lite-v1:0")
 Runs Batch evaluation on the dataset using the batch_apply function of the metric
 ```python
 # Uses Batch Apply
-.aggregate_score(model_id)
+aggregate_score = evaluator.aggregate_score(model_id)
 ```
 
 Runs evaluation on the dataset a row at a time and returns the eval results as a whole.
 ```python
-# Uses Apply metric
-.score(model_id)
+# Uses Apply metric. Returns a list of scores.
+scores = evaluator.score(model_id)
 ```
 
 Save the eval results.
 ```python
 # Save the eval results
-.save()
+evaluator.save("eval_results.jsonl")
 ```
 
 
@@ -291,6 +318,12 @@ WARNING amzn_nova_prompt_optimizer.core.inference: Warn: Prompt Variables not fo
 2. For evaluation sets, the ground truth column should be as close to the inference output as possible. e.g. If the inference output is {"answer": "POSITIVE"} ground truth should also be in the same format {"answer": "POSITIVE"}
 3. For NovaPromptOptimizer, choose the mode (mode= "premier" | ""pro" | "lite" | "micro") based on your Nova Model of choice. By default, we use "pro".
 4. The `apply` function of the evaluation metric should return a numerical value between 0 and 1 for NovaPromptOptimizer or MIPROv2.
+
+## ⚠️ Preview Status
+
+NovaPromptOptimizer is currently in public preview. During this period:
+- SDK functionality might change as we support more use cases.
+- We welcome feedback and contributions
 
 ## Acknowledgements
 * Special acknowledgment to [DSPy](https://github.com/stanfordnlp/dspy) – your innovations continue to inspire us.
