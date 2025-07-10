@@ -24,7 +24,7 @@ A Python SDK for optimizing prompts for Nova.
 
 Install the library using
 ```sh
-pip install amzn-nova-prompt-optimizer
+pip3 install nova-prompt-optimizer
 ```
 
 
