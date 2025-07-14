@@ -24,8 +24,10 @@ from amzn_nova_prompt_optimizer.core.optimizers.miprov2.miprov2_optimizer import
 
 logger = logging.getLogger(__name__)
 
-NOVA_OPTIMA_MODE: Dict[str, Dict[str, Any]] = {
+NOVA_PROMPT_OPTIMIZER_MODE: Dict[str, Dict[str, Any]] = {
     "micro": {
+        "meta_prompt_model_id": "us.amazon.nova-premier-v1:0",
+        "prompter_model_id": "us.amazon.nova-premier-v1:0",
         "task_model_id": "us.amazon.nova-micro-v1:0",
         "num_candidates": 20,
         "num_trials": 30,
@@ -33,6 +35,8 @@ NOVA_OPTIMA_MODE: Dict[str, Dict[str, Any]] = {
         "max_labeled_demos": 4
     },
     "lite": {
+        "meta_prompt_model_id": "us.amazon.nova-premier-v1:0",
+        "prompter_model_id": "us.amazon.nova-premier-v1:0",
         "task_model_id": "us.amazon.nova-lite-v1:0",
         "num_candidates": 20,
         "num_trials": 30,
@@ -40,6 +44,8 @@ NOVA_OPTIMA_MODE: Dict[str, Dict[str, Any]] = {
         "max_labeled_demos": 4
     },
     "pro": {
+        "meta_prompt_model_id": "us.amazon.nova-premier-v1:0",
+        "prompter_model_id": "us.amazon.nova-premier-v1:0",
         "task_model_id": "us.amazon.nova-pro-v1:0",
         "num_candidates": 20,
         "num_trials": 30,
@@ -47,6 +53,8 @@ NOVA_OPTIMA_MODE: Dict[str, Dict[str, Any]] = {
         "max_labeled_demos": 4
     },
     "premier": {
+        "meta_prompt_model_id": "us.amazon.nova-premier-v1:0",
+        "prompter_model_id": "us.amazon.nova-premier-v1:0",
         "task_model_id": "us.amazon.nova-premier-v1:0",
         "num_candidates": 20,
         "num_trials": 30,
@@ -58,10 +66,9 @@ NOVA_OPTIMA_MODE: Dict[str, Dict[str, Any]] = {
 
 class NovaPromptOptimizer(OptimizationAdapter):
     """
-    NovaOptima is a combination of Meta Prompting and MIPROv2 for Nova Models that yields a stable
+    NovaPromptOptimizer is a combination of Meta Prompting and MIPROv2 for Nova Models that yields a stable
     prompt optimization result.
     """
-
     def __init__(self, prompt_adapter: PromptAdapter,
                  inference_adapter: InferenceAdapter,
                  dataset_adapter: DatasetAdapter,
@@ -75,20 +82,6 @@ class NovaPromptOptimizer(OptimizationAdapter):
         self.meta_prompt_optimization_adapter = NovaMPOptimizationAdapter(prompt_adapter, inference_adapter)
 
     def optimize(self, mode: str = "pro", custom_params = None) -> PromptAdapter:
-        if not self.inference_adapter:
-            raise ValueError("Inference Adapter not passed. "
-                             "Initialize and Pass Inference Adapter to use this Optimizer")
-        intermediate_prompt_adapter = self.meta_prompt_optimization_adapter.optimize()
-        if not self.dataset_adapter or not self.metric_adapter:
-            logger.info("[Nova Optima] No Dataset or No metric provided, running only Nova Meta Prompter")
-            return intermediate_prompt_adapter
-
-        nova_optima_optimization_adapter = NovaMIPROv2OptimizationAdapter(
-            prompt_adapter=intermediate_prompt_adapter,
-            dataset_adapter=self.dataset_adapter,
-            metric_adapter=self.metric_adapter,
-            inference_adapter=self.inference_adapter)
-
         if mode == "custom":
             if not custom_params:
                 raise ValueError("Custom mode requires custom_params dictionary")
@@ -96,13 +89,35 @@ class NovaPromptOptimizer(OptimizationAdapter):
                              "max_bootstrapped_demos", "max_labeled_demos"}
             if not all(key in custom_params for key in required_keys):
                 raise ValueError(f"custom_params must contain all required keys: {required_keys}")
+            meta_prompt_model_id = custom_params.pop("meta_prompt_model_id", None)
             optimization_params = custom_params
         else:
-            if mode not in NOVA_OPTIMA_MODE:
+            if mode not in NOVA_PROMPT_OPTIMIZER_MODE:
                 logger.warning(f"Mode '{mode}' not detected, defaulting to 'pro' mode")
-                optimization_params = NOVA_OPTIMA_MODE["pro"]
-            else:
-                optimization_params = NOVA_OPTIMA_MODE[mode]
-        optimized_prompt_adapter = nova_optima_optimization_adapter.optimize(**optimization_params,
-                                                                             enable_json_fallback=False)
+                mode = "pro"
+            config = NOVA_PROMPT_OPTIMIZER_MODE[mode].copy()  # Create a copy to avoid modifying the original
+            meta_prompt_model_id = config.pop("meta_prompt_model_id")
+            optimization_params = config
+
+
+        if not self.inference_adapter:
+            raise ValueError("Inference Adapter not passed. "
+                             "Initialize and Pass Inference Adapter to use this Optimizer")
+        if meta_prompt_model_id:
+            intermediate_prompt_adapter = (
+                self.meta_prompt_optimization_adapter.optimize(prompter_model_id=meta_prompt_model_id))
+        else:
+            intermediate_prompt_adapter = self.meta_prompt_optimization_adapter.optimize()
+
+        if not self.dataset_adapter or not self.metric_adapter:
+            logger.info("[Nova Prompt Optimizer] No Dataset or No metric provided, running only Nova Meta Prompter")
+            return intermediate_prompt_adapter
+
+        nova_prompt_optimizer = NovaMIPROv2OptimizationAdapter(
+            prompt_adapter=intermediate_prompt_adapter,
+            dataset_adapter=self.dataset_adapter,
+            metric_adapter=self.metric_adapter,
+            inference_adapter=self.inference_adapter)
+
+        optimized_prompt_adapter = nova_prompt_optimizer.optimize(**optimization_params, enable_json_fallback=False)
         return optimized_prompt_adapter
