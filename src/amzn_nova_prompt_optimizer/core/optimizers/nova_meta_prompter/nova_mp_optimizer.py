@@ -42,7 +42,7 @@ class NovaMPOptimizationAdapter(OptimizationAdapter):
 
 
     def optimize(self, prompter_model_id: str = DEFAULT_PROMPTER_MODEL_ID, max_retries: int = 5):
-        logger.info("Optimizing prompt using Nova Meta Prompter")
+        logger.info(f"Optimizing prompt using Nova Meta Prompter with Model: {prompter_model_id}")
         if not self.inference_adapter:
             raise ValueError("Inference Adapter not passed. "
                              "Initialize and Pass Inference Adapter to use this Optimizer")
