@@ -18,6 +18,7 @@ A Python SDK for optimizing prompts for Nova.
   * [Evaluator](#evaluator)
 * [Optimization Recommendations](#optimization-recommendations)
 * [Preview Status](#-preview-status)
+* [Interaction with AWS Bedrock](#interaction-with-aws-bedrock)
 * [Acknowledgements](#acknowledgements)
 
 ## Installation
@@ -324,6 +325,15 @@ WARNING amzn_nova_prompt_optimizer.core.inference: Warn: Prompt Variables not fo
 NovaPromptOptimizer is currently in public preview. During this period:
 - SDK functionality might change as we support more use cases.
 - We welcome feedback and contributions
+
+## Interaction with AWS Bedrock
+
+NovaPromptOptimizer only uses AWS Bedrock for Model Calls.
+[Bedrock by default **disables** model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html).
+Data is not retained in the user's AWS account unless the user enables Bedrock Model Invocation logging.
+Data storage by Amazon Bedrock is independent of the use of the SDK.
+
+Please refer to [Amazon Bedrock's Data Protection Guide](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html) for additional guidance
 
 ## Acknowledgements
 * Special acknowledgment to [DSPy](https://github.com/stanfordnlp/dspy) – your innovations continue to inspire us.
