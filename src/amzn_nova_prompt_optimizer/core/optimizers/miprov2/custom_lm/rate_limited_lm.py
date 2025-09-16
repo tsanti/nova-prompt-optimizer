@@ -44,11 +44,13 @@ class RateLimitedLM(dspy.LM):
             # Fallback: return original object if copy fails
             return self
 
-    def copy(self):
-        """DSPy-compatible copy method"""
+    def copy(self, **kwargs):
+        """DSPy-compatible copy method that accepts additional parameters"""
         try:
             rate_limit = getattr(self.rate_limiter, 'rate_limit', 2)
-            return RateLimitedLM(self.wrapped_model, rate_limit)
+            # Create new RateLimitedLM and pass kwargs to the wrapped model's copy method
+            new_wrapped = self.wrapped_model.copy(**kwargs) if hasattr(self.wrapped_model, 'copy') else self.wrapped_model
+            return RateLimitedLM(new_wrapped, rate_limit)
         except Exception:
             # Fallback: return original object if copy fails
             return self
