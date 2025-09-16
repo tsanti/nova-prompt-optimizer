@@ -33,5 +33,14 @@ ENV/
 *.swp
 *.swo
 
+# Amazon Q internal documentation and analysis
+.amazonq/
+
+# Kiro files
+.kiro/
+
+# Jupyter Notebook checkpoints (in any directory)
+**/.ipynb_checkpoints/
+
 # Misc
 .DS_Store
