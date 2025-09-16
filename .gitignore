@@ -47,3 +47,4 @@ temp/
 cleanup.sh
 # Optimization config files
 frontend/opt_conf/
+.amazonq/
