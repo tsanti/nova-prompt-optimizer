@@ -35,6 +35,24 @@ class RateLimitedLM(dspy.LM):
         # Store the wrapped model for delegation.
         self.wrapped_model = model
 
+    def __deepcopy__(self, memo):
+        """Handle deep copy by creating new instance"""
+        try:
+            rate_limit = getattr(self.rate_limiter, 'rate_limit', 2)
+            return RateLimitedLM(self.wrapped_model, rate_limit)
+        except Exception:
+            # Fallback: return original object if copy fails
+            return self
+
+    def copy(self):
+        """DSPy-compatible copy method"""
+        try:
+            rate_limit = getattr(self.rate_limiter, 'rate_limit', 2)
+            return RateLimitedLM(self.wrapped_model, rate_limit)
+        except Exception:
+            # Fallback: return original object if copy fails
+            return self
+
     def __call__(self, *args, **kwargs):
         # Apply rate limiting before making the actual model call
         self.rate_limiter.apply_rate_limiting()

@@ -26,6 +26,33 @@ class BedrockConverseHandler:
         """
         self.client = bedrock_client
 
+    def __deepcopy__(self, memo):
+        """Handle deep copy by creating new instance with fresh client"""
+        import boto3
+        try:
+            # Create new client with same region
+            region_name = getattr(self.client.meta, 'region_name', 'us-east-1')
+            new_client = boto3.client('bedrock-runtime', region_name=region_name)
+            return BedrockConverseHandler(new_client)
+        except Exception:
+            # Fallback: create with default region
+            new_client = boto3.client('bedrock-runtime', region_name='us-east-1')
+            return BedrockConverseHandler(new_client)
+
+    def __getstate__(self):
+        """Prepare object for pickling by storing only serializable data"""
+        try:
+            region_name = getattr(self.client.meta, 'region_name', 'us-east-1')
+        except Exception:
+            region_name = 'us-east-1'
+        return {'region_name': region_name}
+
+    def __setstate__(self, state):
+        """Restore object from pickle by recreating client"""
+        import boto3
+        region_name = state.get('region_name', 'us-east-1')
+        self.client = boto3.client('bedrock-runtime', region_name=region_name)
+
     def call_model(self, model_id, system_prompt, user_input, inference_config):
         """
         Makes a bedrock call for the model_id given a system_prompt, user_input, and the inference_config.

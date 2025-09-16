@@ -43,8 +43,12 @@ class NovaGroundedProposer(GroundedProposer):
         self.TIPS = NOVA_TIPS
 
     def propose_instructions_for_program(
-            self, trainset, program, demo_candidates, trial_logs, N, T
+            self, trainset, program, demo_candidates, trial_logs, N, T=None
     ):
+        # Handle missing T parameter from DSPy calls
+        if T is None:
+            T = N  # Use N as default value
+            
         proposed_instructions = {}
 
         if self.set_history_randomly:
