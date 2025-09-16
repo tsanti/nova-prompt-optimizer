@@ -80,7 +80,6 @@ class NovaGroundedProposer(GroundedProposer):
                         program=program,
                         predictor=predictor,
                         pred_i=pred_i,
-                        T=T,
                         demo_candidates=demo_candidates,
                         demo_set_i=demo_set_i,
                         trial_logs=trial_logs,
