@@ -302,7 +302,6 @@ def setup_optimization_routes(app):
                 json.dump(config, f, default=str)
             
             # Start optimization worker with detailed logging
-            import os
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered output
             
@@ -496,8 +495,6 @@ def setup_optimization_routes(app):
             improvement_pct = f"{((optimized_score - baseline_score) / baseline_score * 100):.1f}%"
         
         # Load optimization files
-        import os
-        import json
         opt_dir = f"optimized_prompts/{optimization_id}"
         
         baseline_prompt = ""
