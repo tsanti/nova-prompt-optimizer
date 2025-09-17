@@ -294,6 +294,10 @@ def setup_optimization_routes(app):
             
             # Save config and start worker
             config_path = f"opt_conf/optimization_config_{optimization_id}.json"
+            
+            # Ensure opt_conf directory exists
+            os.makedirs("opt_conf", exist_ok=True)
+            
             with open(config_path, 'w') as f:
                 json.dump(config, f, default=str)
             
@@ -709,6 +713,10 @@ def setup_optimization_routes(app):
             }
             
             config_path = f"opt_conf/optimization_config_{new_optimization_id}.json"
+            
+            # Ensure opt_conf directory exists
+            os.makedirs("opt_conf", exist_ok=True)
+            
             with open(config_path, 'w') as f:
                 json.dump(config, f, default=str)
             

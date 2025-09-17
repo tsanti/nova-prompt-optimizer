@@ -33,6 +33,9 @@ optimized_prompts/
 prompt_outputs/
 optimization_results/
 
+# Configuration files
+opt_conf/
+
 # Coverage and test artifacts
 .coverage
 .pytest_cache/
