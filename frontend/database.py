@@ -1012,6 +1012,7 @@ class RelevanceMetric(MetricAdapter):
             })
         
         conn.close()
+        return logs
     def create_prompt_template(self, name: str, description: str, builder_data: Dict[str, Any]) -> str:
         """Create a new prompt template from builder data"""
         import uuid
