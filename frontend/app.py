@@ -47,13 +47,10 @@ except ImportError as e:
     print("   Optimization will run in demo mode")
 
 # Import simple generator routes
-from simple_routes import create_simple_generator_routes
+from routes.simple_generator import register_simple_generator_routes
 
-# Maintain backward compatibility for existing imports
-try:
-    from services.simple_dataset_generator import SimpleDatasetGenerator
-except ImportError:
-    from simple_dataset_generator import SimpleDatasetGenerator
+# Import dataset generator
+from services.simple_dataset_generator import SimpleDatasetGenerator
 
 try:
     from services.dataset_conversation import DatasetConversationService
@@ -145,7 +142,7 @@ setup_optimization_routes(app)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Add flexible generator routes
-create_simple_generator_routes(app)  # Works with any format
+register_simple_generator_routes(app)  # Works with any format
 
 # Root route - Dashboard
 @app.get("/")

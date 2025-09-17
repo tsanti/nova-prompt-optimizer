@@ -6,7 +6,7 @@ Handles AI-powered dataset generation
 from fasthtml.common import *
 from database import Database
 from components.layout import create_main_layout, create_card
-from sample_generator import SampleGeneratorService as SampleGenerator
+from services.sample_generator import SampleGeneratorService as SampleGenerator
 import json
 
 

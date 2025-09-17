@@ -4,50 +4,6 @@ Nova Prompt Optimizer - SDK Proxy Worker
 Uses the installed Nova SDK from .venv
 """
 
-
-# CRITICAL: Monkey patch the broken rate limiter BEFORE any Nova imports
-def patch_rate_limiter():
-    import time
-    import threading
-
-    class SimpleRateLimiter:
-        def __init__(self, rate_limit: int = 2):
-            # Convert RPM to RPS properly
-            self.requests_per_second = rate_limit / 60.0 if rate_limit > 0 else 0
-            self.min_interval = (
-                1.0 / self.requests_per_second if self.requests_per_second > 0 else 0
-            )
-            self.last_request_time = 0
-            self.lock = threading.Lock()
-            print(
-                f"🔧 Rate limiter initialized: {rate_limit} RPM = {self.requests_per_second:.3f} RPS"
-            )
-
-        def apply_rate_limiting(self):
-            if self.requests_per_second <= 0:
-                return
-
-            with self.lock:
-                current_time = time.time()
-                time_since_last = current_time - self.last_request_time
-
-                if time_since_last < self.min_interval:
-                    sleep_time = self.min_interval - time_since_last
-                    print(f"🔄 Rate limiting: sleeping {sleep_time:.1f}s")
-                    time.sleep(sleep_time)
-
-                self.last_request_time = time.time()
-
-    # Patch the module before it gets imported
-    import amzn_nova_prompt_optimizer.util.rate_limiter as rate_limiter_module
-
-    rate_limiter_module.RateLimiter = SimpleRateLimiter
-    print("✅ Rate limiter patched successfully")
-
-
-# Apply the patch immediately
-patch_rate_limiter()
-
 import json
 import os
 import sys
@@ -833,26 +789,6 @@ def run_optimization_worker(optimization_id: str, config: dict = None):
             print(
                 f"🔍 SDK CONFIG - SDK default config: {inference_adapter.default_inference_config}"
             )
-
-        # Import and monkey patch the broken rate limiter
-        from simple_rate_limiter import SimpleRateLimiter
-        import amzn_nova_prompt_optimizer.util.rate_limiter as rate_limiter_module
-
-        # Replace the broken RateLimiter with our working one
-        class WorkingRateLimiter:
-            def __init__(self, rate_limit: int = 2):
-                # Convert to RPS and use our simple limiter
-                rps = rate_limit / 60.0 if rate_limit > 0 else 0
-                self.limiter = SimpleRateLimiter(rps)
-                print(
-                    f"🔧 Using working rate limiter: {rate_limit} RPM = {rps:.3f} RPS"
-                )
-
-            def apply_rate_limiting(self):
-                self.limiter.apply_rate_limiting()
-
-        # Monkey patch the module
-        rate_limiter_module.RateLimiter = WorkingRateLimiter
 
         # Store backend rate limit as RPS (backend rate limiter expects requests per second)
         backend_rate_limit_rps = (
