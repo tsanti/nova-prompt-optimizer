@@ -5,6 +5,7 @@ Analyzes datasets and generates optimized prompts using Nova SDK best practices
 
 import json
 import csv
+import os
 import boto3
 from typing import Dict, List, Any
 from botocore.exceptions import ClientError
@@ -15,7 +16,9 @@ class PromptGeneratorService:
     
     def __init__(self, model_id: str = "us.amazon.nova-pro-v1:0"):
         self.model_id = model_id
-        self.bedrock = boto3.client('bedrock-runtime')
+        # Get region with fallback
+        region = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+        self.bedrock = boto3.client('bedrock-runtime', region_name=region)
     
     def generate_optimized_prompt(self, dataset_path: str, task_description: str, prompt_name: str) -> Dict[str, Any]:
         """Generate optimized prompt from dataset analysis"""

@@ -3,6 +3,7 @@ Metric Service - Code generation using Amazon Nova Premier for custom metrics
 """
 
 import json
+import os
 import re
 import boto3
 from typing import Dict, List, Any
@@ -18,7 +19,10 @@ class MetricService:
             connect_timeout=10,
             retries={'max_attempts': 2}
         )
-        self.bedrock = boto3.client('bedrock-runtime', config=config)
+        
+        # Get region with fallback
+        region = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+        self.bedrock = boto3.client('bedrock-runtime', region_name=region, config=config)
     
     def generate_metric_code(self, name: str, criteria: Dict, model_id: str = "us.amazon.nova-premier-v1:0", rate_limit: int = 60) -> str:
         """Generate MetricAdapter subclass code using Amazon Nova Premier"""
