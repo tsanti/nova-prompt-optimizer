@@ -59,3 +59,4 @@ frontend/opt_conf/
 
 # Jupyter Notebook checkpoints (in any directory)
 **/.ipynb_checkpoints/
+.amazonq/
