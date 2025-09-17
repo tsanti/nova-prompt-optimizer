@@ -383,14 +383,15 @@ def setup_optimization_routes(app):
                         
                         // Update logs
                         if (data.logs && data.logs.length > 0) {{
-                            console.log('Received logs:', data.logs.length, 'total logs');
+                            console.log('Received logs:', data.logs.length, 'total logs, lastLogCount:', lastLogCount);
                             const logContainer = document.getElementById('log-container');
                             
                             // Only add new logs
                             if (data.logs.length > lastLogCount) {{
                                 const newLogs = data.logs.slice(lastLogCount);
                                 console.log('Adding', newLogs.length, 'new logs');
-                                newLogs.forEach(log => {{
+                                newLogs.forEach((log, index) => {{
+                                    console.log('Adding log:', log.message);
                                     const logLine = document.createElement('div');
                                     logLine.className = 'mb-1';
                                     logLine.innerHTML = `<span class="text-gray-400">${{log.timestamp || new Date().toLocaleTimeString()}}:</span> ${{log.message}}`;
@@ -400,9 +401,11 @@ def setup_optimization_routes(app):
                                 // Auto-scroll to bottom
                                 logContainer.scrollTop = logContainer.scrollHeight;
                                 lastLogCount = data.logs.length;
+                            }} else {{
+                                console.log('No new logs to add');
                             }}
                         }} else {{
-                            console.log('No logs received or empty logs array');
+                            console.log('No logs received or empty logs array, data:', data);
                             if (lastLogCount === 0) {{
                                 document.getElementById('log-container').innerHTML = '<div class="text-gray-400">Waiting for logs...</div>';
                             }}
@@ -424,7 +427,7 @@ def setup_optimization_routes(app):
                 
                 // Start monitoring
                 updateProgress(); // Initial call
-                const progressInterval = setInterval(updateProgress, 3000); // Update every 3 seconds
+                const progressInterval = setInterval(updateProgress, 1000); // Update every 1 second for better responsiveness
                 
                 // Stop monitoring when page unloads
                 window.addEventListener('beforeunload', () => {{
