@@ -315,16 +315,19 @@ def setup_optimization_routes(app):
             
             app.state.optimization_logs[optimization_id] = queue.Queue()
             
-            # Start process with output capture
+            # Start process with output capture (but still show in terminal)
             process = subprocess.Popen([
                 'python3', 'sdk_worker.py', optimization_id, json.dumps(config)
             ], cwd=os.getcwd(), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
                universal_newlines=True, bufsize=1)
             
-            # Thread to capture output and put in queue
+            # Thread to capture output and put in queue AND print to terminal
             def capture_logs():
                 for line in iter(process.stdout.readline, ''):
                     if line.strip():
+                        # Print to terminal (so you can still see it)
+                        print(line.strip())
+                        # Also add to queue for web interface
                         app.state.optimization_logs[optimization_id].put({
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                             'message': line.strip()
