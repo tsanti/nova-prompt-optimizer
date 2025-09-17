@@ -656,12 +656,12 @@ def run_optimization_worker(optimization_id: str, config: dict = None):
                                 else:
                                     result = float(result)
 
-                                # Handle 0-100 scale conversion
+                                # Handle scale conversion - composite metrics typically use 0-4 scale
                                 if result > 1.0:
                                     print(
-                                        f"⚠️ DEBUG - Metric returned {result} > 1.0, converting from 0-100 to 0-1 scale"
+                                        f"⚠️ DEBUG - Metric returned {result} > 1.0, assuming 0-4 scale, converting to 0-1"
                                     )
-                                    result = result / 100.0
+                                    result = result / 4.0  # Convert from 0-4 scale to 0-1 scale
 
                                 # Clamp to 0-1 range
                                 result = max(0.0, min(1.0, result))
