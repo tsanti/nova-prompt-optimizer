@@ -301,13 +301,37 @@ def setup_optimization_routes(app):
             with open(config_path, 'w') as f:
                 json.dump(config, f, default=str)
             
-            # Start optimization worker with detailed logging
+            # Start optimization worker with output capture for real-time display
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered output
             
-            subprocess.Popen([
+            # Store process globally for log streaming
+            import threading
+            import queue
+            
+            # Create a queue to store live logs
+            if not hasattr(app.state, 'optimization_logs'):
+                app.state.optimization_logs = {}
+            
+            app.state.optimization_logs[optimization_id] = queue.Queue()
+            
+            # Start process with output capture
+            process = subprocess.Popen([
                 'python3', 'sdk_worker.py', optimization_id, json.dumps(config)
-            ], cwd=os.getcwd(), env=env)
+            ], cwd=os.getcwd(), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+               universal_newlines=True, bufsize=1)
+            
+            # Thread to capture output and put in queue
+            def capture_logs():
+                for line in iter(process.stdout.readline, ''):
+                    if line.strip():
+                        app.state.optimization_logs[optimization_id].put({
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                            'message': line.strip()
+                        })
+                process.stdout.close()
+            
+            threading.Thread(target=capture_logs, daemon=True).start()
             
             return HTMLResponse(f'<script>alert("Optimization started!"); window.location.href="/optimization/progress/{optimization_id}";</script>')
             
@@ -367,7 +391,7 @@ def setup_optimization_routes(app):
             
             # Real-time monitoring script
             Script(f"""
-                let lastLogCount = 0;
+                let allLogs = []; // Store all logs locally
                 
                 async function updateProgress() {{
                     try {{
@@ -381,34 +405,22 @@ def setup_optimization_routes(app):
                         const progress = data.progress || 0;
                         document.getElementById('progress-bar').style.width = progress + '%';
                         
-                        // Update logs
+                        // Add new logs to our local collection
                         if (data.logs && data.logs.length > 0) {{
-                            console.log('Received logs:', data.logs.length, 'total logs, lastLogCount:', lastLogCount);
+                            console.log('Received', data.logs.length, 'new logs');
                             const logContainer = document.getElementById('log-container');
                             
-                            // Only add new logs
-                            if (data.logs.length > lastLogCount) {{
-                                const newLogs = data.logs.slice(lastLogCount);
-                                console.log('Adding', newLogs.length, 'new logs');
-                                newLogs.forEach((log, index) => {{
-                                    console.log('Adding log:', log.message);
-                                    const logLine = document.createElement('div');
-                                    logLine.className = 'mb-1';
-                                    logLine.innerHTML = `<span class="text-gray-400">${{log.timestamp || new Date().toLocaleTimeString()}}:</span> ${{log.message}}`;
-                                    logContainer.appendChild(logLine);
-                                }});
-                                
-                                // Auto-scroll to bottom
-                                logContainer.scrollTop = logContainer.scrollHeight;
-                                lastLogCount = data.logs.length;
-                            }} else {{
-                                console.log('No new logs to add');
-                            }}
-                        }} else {{
-                            console.log('No logs received or empty logs array, data:', data);
-                            if (lastLogCount === 0) {{
-                                document.getElementById('log-container').innerHTML = '<div class="text-gray-400">Waiting for logs...</div>';
-                            }}
+                            // Add each new log
+                            data.logs.forEach(log => {{
+                                allLogs.push(log);
+                                const logLine = document.createElement('div');
+                                logLine.className = 'mb-1';
+                                logLine.innerHTML = `<span class="text-gray-400">${{log.timestamp}}:</span> ${{log.message}}`;
+                                logContainer.appendChild(logLine);
+                            }});
+                            
+                            // Auto-scroll to bottom
+                            logContainer.scrollTop = logContainer.scrollHeight;
                         }}
                         
                         // Redirect when completed
@@ -427,7 +439,7 @@ def setup_optimization_routes(app):
                 
                 // Start monitoring
                 updateProgress(); // Initial call
-                const progressInterval = setInterval(updateProgress, 1000); // Update every 1 second for better responsiveness
+                const progressInterval = setInterval(updateProgress, 1000); // Update every 1 second
                 
                 // Stop monitoring when page unloads
                 window.addEventListener('beforeunload', () => {{
@@ -444,22 +456,33 @@ def setup_optimization_routes(app):
 
     @app.get("/optimization/{optimization_id}/status")
     async def get_optimization_status(request):
-        """Get optimization status and logs"""
+        """Get optimization status and live logs"""
         optimization_id = request.path_params['optimization_id']
         
         try:
             db = Database()
             optimization = db.get_optimization(optimization_id)
-            logs = db.get_optimization_logs(optimization_id)
             
             if not optimization:
                 return {"success": False, "error": "Optimization not found"}
+            
+            # Get live logs from queue instead of database
+            live_logs = []
+            if hasattr(app.state, 'optimization_logs') and optimization_id in app.state.optimization_logs:
+                log_queue = app.state.optimization_logs[optimization_id]
+                # Drain the queue to get all logs
+                while not log_queue.empty():
+                    try:
+                        log_entry = log_queue.get_nowait()
+                        live_logs.append(log_entry)
+                    except:
+                        break
             
             return {
                 "success": True,
                 "status": optimization['status'],
                 "progress": optimization.get('progress', 0),
-                "logs": logs
+                "logs": live_logs
             }
             
         except Exception as e:
