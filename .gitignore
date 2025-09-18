@@ -55,7 +55,6 @@ frontend/opt_conf/
 .kiro/
 
 # GitHub workflow files (if not needed in public repo)
-.github/
 
 # Jupyter Notebook checkpoints (in any directory)
 **/.ipynb_checkpoints/
