@@ -1,208 +1,72 @@
-# NovaPromptOptimizer
+# Nova Prompt Optimizer
 
 A Python SDK for optimizing prompts for Nova.
 
-## Getting Started
+## 📚 Table of contents
+* [Installation](#installation)
+* [Pre-Requisites](#pre-requisites)
+* [Quick Start: Facility Support Analyzer Dataset](#-quick-start)
+* [Core Concepts](#core-concepts)
+  * [Input Adapters](#input-adapters)
+    * [1. Prompt Adapter](#1-prompt-adapter)
+    * [2. Inference Adapter](#2-inference-adapter)
+    * [3. Dataset Adapter](#3-dataset-adapter)
+    * [4. Metric Adapter](#4-metric-adapter)
+    * [5. Optimization Adapter](#5-optimization-adapter)
+  * [Optimizers](#optimizers)
+    * [NovaPromptOptimizer](#novapromptoptimizer)
+  * [Evaluator](#evaluator)
+* [Optimization Recommendations](#optimization-recommendations)
+* [Preview Status](#-preview-status)
+* [Interaction with AWS Bedrock](#interaction-with-aws-bedrock)
+* [Acknowledgements](#acknowledgements)
 
-### Installation
+## Installation
+
 Install the library using
 ```sh
-pip install amzn-nova-prompt-optimizer
+pip3 install nova-prompt-optimizer
 ```
 
-## Optimization Recommendations
-1. Provide representative real-world evaluation sets and split them into training and testing sets. Ensure dataset is balanced on output label when splitting train and test sets.
-2. For evaluation sets, the ground truth column should be as close to the inference output as possible. e.g. If the inference output is {"answer": "POSITIVE"} ground truth should also be in the same format {"answer": "POSITIVE"}
-3. For Nova Optima, choose the mode (mode= "premier" | ""pro" | "lite" | "micro"). By default, we use "pro".
-4. The `apply` function of the evaluation metric should return a numerical value between 0 and 1 for Nova Optima or MIPROv2.
 
-## How to use the SDK?
-At a high level this can be broken down as:
+## Pre-Requisites
 
-1. Setup the Input Adapters i.e. Dataset Adapter (Train and Test), Prompt Adapter (Original Prompt), Metric Adapter and Inference Adapter
-2. Run the evaluation for your model of choice using the Test Dataset Adapter and note the baseline score.
-3. Run Nova Optima using the input adapters with the mode based on your current model class i.e. For Claude 3.5 Haiku, if you want to use Nova Lite use mode="lite"
-4. Run the evaluation with the prompt adapter returned by Nova Optima and note the score and compare with baseline. 
+#### Setup your AWS Access Keys:
 
+To execute the SDK, you will need AWS credentials configured. Take a look at the [AWS CLI configuration documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html#config-settings-and-precedence) for details on the various ways to configure credentials. 
+An easy way to try out the SDK is to populate the following environment variables with your AWS API credentials. 
+Take a look at this guide for [Authenticating with short-term credentials for the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-short-term.html)
 
-## Input Adapters
-
-### 1. Dataset Adapter
-
-**Responsibility:** Ability to read/write datasets from different formats. Uses an intermediary standardized format when communicating with other adapters. 
-It can also read list of JSON object. It can also create Train/Test splits (with stratify capability if set)
-
-**Requirements:** Currently, you can only provide a singleton set as output column. 
-
-**Core Functions**
 ```commandline
-# Adapt to the Standardized Format (JSON)
-.adapt()
-
-# Prints the datasets first 10 rows to view
-.show()
-
-# Fetches the dataset as a List of JSON in standardized format
-.fetch()
-
-# Splits the dataset based on provided percentage (0 to 1). Stratifies if Set.
-.split(split_percentage: float, stratify: bool = False)
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
 ```
 
-**Standardized Data Format**
+#### To enable Nova model access:
+1. Go to the Amazon Bedrock Model Access page
+2. Click "Manage model access"
+3. Choose Amazon as provider and Nova models
+4. Click "Request access"
+5. Wait for approval (instant in most cases)
 
-```python
-{
-    "inputs": {
-        "prompt_var_key_1": "foo",
-        "prompt_var_key_2": "bar",
-        ....
-            "model_input": "model input"
-},
-"outputs": {
-    "ground_truth": "ground_truth"
-}
-}
 
-# Example
+## 🏁 Quick Start
+### Facility Support Analyzer Dataset
+The Facility Support Analyzer dataset consists of emails that are to be classified based on category, urgency and sentiment.
 
-## JSONL Input
-row = {"product_type": "foo", "conversation_history": "bar", "question": "what's the...", "answer": "the..", "ground_truth": "{\"score\": \"4\", \"sentiment\": \"POSITIVE\"}"}
+Please see the [samples](samples/facility-support-analyzer/) folder for example notebooks of how to optimize a prompt in the scenario where a [user prompt template is to be optimized](samples/facility-support-analyzer/user_prompt_only) and the scenario where a [user and system prompt is to be optimized together](samples/facility-support-analyzer/system_and_user_prompt)
 
-.adapt(row)
 
-## Standardized Data
-row = {
-    "inputs": {
-        "product_type": "foo",
-        "conversation_history": "bar",
-        "question": "what's the ...",
-        "answer": "The...."
-    },
-    "outputs": {
-        "ground_truth": "{\"score\": \"4\", \"sentiment\": \"POSITIVE\"}"
-    }
-}
-```
+## Core Concepts
 
-**Sample Dataset Adapter Initialization**
-```python
-# Example Usage
-from amzn_nova_prompt_optimizer.core.input_adapters.dataset_adapter import JSONDatasetAdapter
+### Input Adapters
+We break each component of Prompt Optimization into Adapters providing a modular approach to Prompt Optimization.
 
-input_columns = {"input"}
-output_columns = {"answer"}
+![adapters](docs/adapters.png)
 
-dataset_adapter = JSONDatasetAdapter(input_columns, output_columns)
-
-# Adapt
-dataset_adapter.adapt(file_path="sample_data.jsonl")
-
-# Split
-train, test = dataset_adapter.split(0.5)
-```
-
-**Supported Dataset Adapters:** `JSONDatasetAdapter`, `CSVDatasetAdapter`
-
-### 2. Prompt Adapter
+### 1. Prompt Adapter
 
 **Responsibility:** Ability to load prompts from different formats and store them in the standardized format (JSON)
-
-**Core Functions**
-```commandline
-# Set the System Prompt for the Adapter
-.set_system_prompt(file_path=, variables=)
-
-# Set the User Prompt for the Adapter
-.set_user_prompt(file_path=, variables=)
-
-# (Optional) Add few shot examples
-.add_few_shot(examples=, format_type="converse"|"append_to_user_prompt"|"append_to_system_prompt")
-
-# Adapt prompt to Standardized Format
-.adapt()
-
-# Save the prompt to the required format, requires directory path
-.save("path/to/directory")
-```
-
-**Standardized Prompt Format**
-
-```json
-{
-    "user_prompt_component": {
-        "variables": ["var_1", "var_2", "var_3"],
-        "template": "Task: You are a...... {{var_1}}, {{var_2}}",
-        "metadata": {
-            "format": "text",
-        }
-    },
-    "system_prompt_component": {
-        "variables": ["var_1", "var_2", "var_3"],
-        "template": "Task: You are a...... {{var_1}}, {{var_2}}",
-        "metadata": {
-            "format": "text",
-        }
-    },
-    "few_shot": {
-        "examples": [{
-            "input": "",
-            "output": ""
-        }, {
-            "input": "",
-            "output": ""
-        }],
-        "format": "converse" | "append_to_user_prompt" | "append_to_system_prompt"
-    }
-}
-```
-
-
-**Example**
-```
-# system_prompt.txt
-'''
-You are a review classifier for ABC. Provide a review....
-'''
-```
-```
-# user_prompt.txt
-'''
-Classify the sentiment of the following review:
-
-{{ review }}
-
-Respond only with: positive, neutral, or negative.
-'''
-```
-
-```python
-.set_system_prompt(file_path="system_prompt.txt", variables={})
-
-.set_user_prompt(file_path="user_prompt.txt", variables={"review"})
-
-.adapt()
-```
-
-```json
-## Standardized Prompt
-{
-    "user_prompt_component": {
-        "variables": ["review"],
-        "template": "Classify the sentiment of the following review....",
-        "metadata": {
-            "format": "text",
-        }
-    },
-    "system_prompt_component": {
-        "variables": [],
-        "template": "You are a review classifier for ABC. Provide a review....",
-        "metadata": {
-            "format": "text",
-        }
-    }
-}
-```
 
 
 **Sample Prompt Adapter Initialization**
@@ -221,183 +85,10 @@ prompt_adapter.adapt()
 
 **Supported Prompt Adapters:** `TextPromptAdapter`
 
-#### Supported Few-Shot Formats
-**1. Converse**
+Learn More about the Prompt Adapter [here](docs/PromptAdapter.md)
 
-When Few-Shot format type is `converse`, we pass the examples as User/Assistant turns when running inference.
-
-When you save the prompt adapter, we save the `system_prompt.txt`, `user_prompt.txt`, and `few_shot.json` in 
-Converse format.
-
-Example:
-```json
-{
-    "user_prompt_component": {
-        "variables": ["review"],
-        "template": "Classify the sentiment of the following review....",
-        "metadata": {
-            "format": "text"
-        }
-    },
-    "system_prompt_component": {
-        "variables": [],
-        "template": "You are a review classifier for ABC. Provide a review....",
-        "metadata": {
-            "format": "text"
-        }
-    },
-    "few_shot": {
-        "examples": [{
-            "input": "foo_1",
-            "output": "bar_1"
-        }, {
-            "input": "foo_2",
-            "output": "bar_2"
-        }],
-        "format": "converse"
-    }
-}
-```
-
-```user_prompt.txt
-Classify the sentiment of the following review....
-```
-```system_prompt.txt
-You are a review classifier for ABC. Provide a review....
-```
-
-```json
-[{
-    "role": "user",
-    "content": [{
-        "text": "foo_1"
-    }]
-}, {
-    "role": "assistant",
-    "content": [{
-        "text": "bar_1"
-    }]
-},{
-    "role": "user",
-    "content": [{
-        "text": "foo_2"
-    }]
-}, {
-    "role": "assistant",
-    "content": [{
-        "text": "bar_2"
-    }]
-}]
-```
-
-**2. Append to User Prompt / Append to System Prompt**
-
-When Few-Shot format type is `append_to_user_prompt` or `append_to_system_prompt`, we append the examples to either the user_prompt or the system prompt based on the specification
-
-When you save the prompt adapter, we save the `system_prompt.txt` and `user_prompt.txt` and they will contain the examples
-
-Example:
-```json
-{
-    "user_prompt_component": {
-        "variables": ["review"],
-        "template": "Classify the sentiment of the following review....",
-        "metadata": {
-            "format": "text"
-        }
-    },
-    "system_prompt_component": {
-        "variables": [],
-        "template": "You are a review classifier for ABC. Provide a review....",
-        "metadata": {
-            "format": "text"
-        }
-    },
-    "few_shot": {
-        "examples": [{
-            "input": "foo_1",
-            "output": "bar_1"
-        }, {
-            "input": "foo_2",
-            "output": "bar_2"
-        }],
-        "format": "append_to_user_prompt"
-    }
-}
-```
-
-```user_prompt.txt
-Classify the sentiment of the following review....
-
-**Examples**
-Example 1:
-Input: foo_1
-Output: bar_1
-
-Example 2:
-Input: foo_2
-Output: bar_2
-```
-```system_prompt.txt
-You are a review classifier for ABC. Provide a review....
-```
-
-### 3. Metric Adapter
-**Responsibility:** Ability to load custom metrics and apply them on inference output and ground truth
-
-**Core Functions**
-```commandline
-# Apply the metric on a prediction and ground_truth
-.apply(y_pred: Any, y_true: Any)
-
-# Apply the metric on a list of prediction and ground_truth
-.batch_apply(y_preds: List[Any], y_trues: List[Any])
-```
-
-**Sample Custom Metric Adapter Initialization**
-
-```python
-from amzn_nova_prompt_optimizer.core.input_adapters.metric_adapter import MetricAdapter
-from typing import List, Any, Dict
-import re
-import json
-
-class CustomMetric(MetricAdapter):
-    def _parse_answer(self, model_output):
-        match = re.search(r"<answer>(.*?)</answer>", model_output)
-        if not match:
-            return "Choice not found"
-        return match.group(1).lower().strip()
-
-    def _calculate_metrics(self, y_pred: Any, y_true: Any) -> Dict:
-        pred = self._parse_answer(y_pred)
-        ground_truth = self._parse_answer(y_true)
-        return int(pred == ground_truth)
-
-    def apply(self, y_pred: Any, y_true: Any):
-        return self._calculate_metrics(y_pred, y_true)
-
-    def batch_apply(self, y_preds: List[Any], y_trues: List[Any]):
-        evals = []
-        for y_pred, y_true in zip(y_preds, y_trues):
-            evals.append(self.apply(y_pred, y_true))
-        return sum(evals)/len(evals)
-
-metric_adapter = CustomMetric()
-```
-
-## 4. Inference Adapter
+### 2. Inference Adapter
 **Responsibility:** Ability to call an inference backend for the models e.g. Bedrock, etc.
-
-**Core Functions**
-```commandline
-# Call the model with the passed parametrs
-.call_model(model_id: str, system_prompt: str, messages: List[Dict[str, str]], inf_config: Dict[str, Any])
-
-```
-
-The Inference Adapter accepts the `system_prompt` as a string and the input to the model as a list of User/Assistant 
-turns. e.g. `[{"user": "foo"}, {"assistant": "bar"}, {"user": "What comes next?"}]`
 
 **Sample use of Inference Adapter**
 
@@ -407,99 +98,187 @@ from amzn_nova_prompt_optimizer.core.inference.adapter import BedrockInferenceAd
 inference_adapter = BedrockInferenceAdapter(region_name="us-east-1")
 ```
 
-**Supported Inference Adapters:** `BedrockInferenceAdapter`
+You can pass `rate_limit` into constructor of InferenceAdapter to limit the max TPS of bedrock call to avoid throttle. Default to 2 if not set.
 
-## 5. Optimizers
+```python
+from amzn_nova_prompt_optimizer.core.inference.adapter import BedrockInferenceAdapter
 
-#### Optimization Adapter
-
-**Responsibility:** Load Optimizer, Prompt Adapter, and Optionally Dataset Adapter, Metric Adapter, and Inference Adapter. Perform Optimization and ability to create a Prompt Adapter with the Optimized Prompt.
-
-**Core Functions**
-```commandline
-# Optimize and return a PromptAdapter
-.optimize() -> PromptAdapter
+inference_adapter = BedrockInferenceAdapter(region_name="us-east-1", rate_limit=10) # Max 10 TPS
 ```
 
-### Nova Optima
+**Supported Inference Adapters:** `BedrockInferenceAdapter`
 
-Nova Optima is a combination of Meta Prompting using the Nova Guide on prompting and DSPy's MIPROv2 Optimizer using Nova Prompting Tips. 
-Nova Optima first runs a meta prompter to identify system instructions and user template from the prompt adapter. 
+**Core Functions**
+
+Call the model using the parameters
+```python
+# Call the model with the passed parametrs
+inference_output = inference_adapter.call_model(model_id: str, system_prompt: str, messages: List[Dict[str, str]], inf_config: Dict[str, Any])
+```
+
+The Inference Adapter accepts the `system_prompt` as a string.
+
+The input to the model as a list of User/Assistant turns (messages). e.g. `[{"user": "foo"}, {"assistant": "bar"}, {"user": "What comes next?"}]`
+
+### 3. Dataset Adapter
+
+**Responsibility:** Ability to read/write datasets from different formats. Uses an intermediary standardized format when communicating with other adapters.
+It can also read list of JSON object. It can also create Train/Test splits (with stratify capability if set).
+
+**Requirements:** Currently, you can only provide a singleton set as output column.
+
+**Sample Dataset Adapter Initialization**
+```python
+# Example Usage
+from amzn_nova_prompt_optimizer.core.input_adapters.dataset_adapter import JSONDatasetAdapter
+
+input_columns = {"input"}
+output_columns = {"answer"}
+
+dataset_adapter = JSONDatasetAdapter(input_columns, output_columns)
+
+# Adapt
+dataset_adapter.adapt(data_source="sample_data.jsonl")
+
+# Split
+train, test = dataset_adapter.split(0.5)
+```
+
+**Supported Dataset Adapters:** `JSONDatasetAdapter`, `CSVDatasetAdapter`
+
+Learn More about the Dataset Adapter [here](docs/DatasetAdapter.md)
+
+### 4. Metric Adapter
+**Responsibility:** Ability to load custom metrics and apply them on inference output and ground truth
+
+**Metric Adapter Class**
+```python
+class MetricAdapter():
+    def apply(self, y_pred: Any, y_true: Any) -> float:
+        pass
+
+    def batch_apply(self, y_preds: List[Any], y_trues: List[Any]) -> float:
+        pass
+```
+
+**Sample Custom Metric Adapter Initialization**
+Let's create a Custom metric adapter that parses the inference output for the answer between `<answer> </answer>` tags and then performs an exact match metric.
+
+```python
+from amzn_nova_prompt_optimizer.core.input_adapters.metric_adapter import MetricAdapter
+from typing import List, Any, Dict
+import re
+import json
+
+class CustomMetric(MetricAdapter):
+    def _parse_answer(self, model_output):
+        # Parse Answer between tags
+        match = re.search(r"<answer>(.*?)</answer>", model_output)
+        if not match:
+            return "Choice not found"
+        return match.group(1).lower().strip()
+
+    def _calculate_metrics(self, y_pred: Any, y_true: Any) -> Dict:
+        # Peform Exact Match
+        pred = self._parse_answer(y_pred)
+        ground_truth = self._parse_answer(y_true)
+        return int(pred == ground_truth)
+
+    def apply(self, y_pred: Any, y_true: Any):
+        # Apply to one row of the dataset
+        return self._calculate_metrics(y_pred, y_true)
+
+    def batch_apply(self, y_preds: List[Any], y_trues: List[Any]):
+        # Apply to the whole dataset
+        evals = []
+        for y_pred, y_true in zip(y_preds, y_trues):
+            evals.append(self.apply(y_pred, y_true))
+        return sum(evals)/len(evals)
+
+metric_adapter = CustomMetric()
+```
+
+**Core Functions**
+Apply the metric on a prediction and ground_truth one row at a time
+```python
+y_pred = "The question asks ...... <answer>3</answer>"
+y_true = "<answer>3</answer>"
+
+# Apply the metric on a prediction and ground_truth
+score = metric_adapter.apply(y_pred, y_true)
+
+# score = 1
+```
+
+Apply the metric on a list of prediction and ground_truth i.e. for the dataset
+```python
+y_preds = ["The question asks ...... <answer>3</answer>", "The question asks ...... <answer>5</answer>"]
+y_trues = ["<answer>3</answer>", "<answer>4</answer>"]
+
+# Apply the metric on a list of prediction and ground_truth
+aggregeate_score = metric_adapter.batch_apply(y_preds, y_trues)
+
+# aggregeate_score = 0.5
+```
+
+
+### 5. Optimization Adapter
+**Responsibility:** Load Optimizer, Prompt Adapter, and Optionally Dataset Adapter, Metric Adapter, and Inference Adapter. Perform Optimization and ability to create a Prompt Adapter with the Optimized Prompt.
+
+Sample Optimization Initialization
+```python
+from amzn_nova_prompt_optimizer.core.optimizers import NovaPromptOptimizer
+
+nova_prompt_optimizer = NovaPromptOptimizer(prompt_adapter=prompt_adapter, inference_adapter=inference_adapter, dataset_adapter=train_dataset_adapter, metric_adapter=metric_adapter)
+
+optimized_prompt_adapter = nova_prompt_optimizer.optimize(mode="lite")
+```
+
+We can take a look more deeply into the optimizers in the next section.
+
+
+## Optimizers
+
+### NovaPromptOptimizer
+
+NovaPromptOptimizer is a combination of Meta Prompting using the Nova Guide on prompting and DSPy's MIPROv2 Optimizer using Nova Prompting Tips. 
+NovaPromptOptimizer first runs a meta prompter to identify system instructions and user template from the prompt adapter. 
 Then MIPROv2 is run on top of this to optimize system instructions and identify few-shot samples that need to be added. 
 The few shot samples are added as `converse` format so they are added as User/Assistant turns.
 
-**Requirements:** Nova Optima requires Prompt Adapter, Dataset Adapter, Metric Adapter and Inference Adapter.
+**Requirements:** NovaPromptOptimizer requires Prompt Adapter, Dataset Adapter, Metric Adapter and Inference Adapter.
 
 **Optimization Example**
 ```python
-from amzn_nova_prompt_optimizer.core.optimizers import NovaOptima
+from amzn_nova_prompt_optimizer.core.optimizers import NovaPromptOptimizer
 
-nova_optima = NovaOptima(prompt_adapter=prompt_adapter, inference_adapter=inference_adapter, dataset_adapter=train_dataset_adapter, metric_adapter=metric_adapter)
+nova_prompt_optimizer = NovaPromptOptimizer(prompt_adapter=prompt_adapter, inference_adapter=inference_adapter, dataset_adapter=train_dataset_adapter, metric_adapter=metric_adapter)
 
-nova_optima_adapter = nova_optima.optimize(mode="lite", enable_json_fallback=False)
+optimized_prompt_adapter = nova_prompt_optimizer.optimize(mode="lite")
 ```
-Nova Optima uses Premier for Meta Prompting and then uses MIPROv2 with 20 candidates and 50 trials with Premier as Prompting model and task model dependent on the mode it's set at.
+NovaPromptOptimizer uses Premier for Meta Prompting and then uses MIPROv2 with 20 candidates and 50 trials with Premier as Prompting model and task model dependent on the mode it's set at.
 You can specify enable_json_fallback=False to disable the behavior that MIPROv2 will [fallback to use JSONAdapter to parse LM model output](https://github.com/stanfordnlp/dspy/blob/main/dspy/adapters/chat_adapter.py#L44-L51). This will force MIPROv2 use structured output (pydantic model) to parse LM output.
 
-#### Other Optimizers
-#### Nova Meta Prompter
+You could also define a custom mode and pass your own parameter values to NovaPromptOptimizer
 
-Nova Meta Prompter performs Meta Prompting using the [Nova Guide on prompting](https://docs.aws.amazon.com/nova/latest/userguide/prompting-precision.html). 
-Nova Meta Prompter identifies system instructions and user template from the prompt adapter.
-
-**Requirements:** Nova Meta Prompter requires Prompt Adapter and Inference Adapter.
-
-**Optimization Example**
 ```python
-from amzn_nova_prompt_optimizer.core.optimizers import NovaMPOptimizationAdapter
+from amzn_nova_prompt_optimizer.core.optimizers import NovaPromptOptimizer
 
-nova_mp_optimization_adapter = NovaMPOptimizationAdapter(prompt_adapter=prompt_adapter, inference_adapter=inference_adapter)
+nova_prompt_optimizer = NovaPromptOptimizer(prompt_adapter=prompt_adapter, inference_adapter=inference_adapter, dataset_adapter=train_dataset_adapter, metric_adapter=metric_adapter)
 
-nova_mp_optimized_prompt_adapter = nova_mp_optimization_adapter.optimize(max_retries=5)
-```
-Nova Meta Prompter uses Premier for Meta Prompting. Max Retries to retry optimization if optimized prompts do not contain prompt variables.
-
-#### MIPROv2
-
-MIPROv2 (Multiprompt Instruction PRoposal Optimizer Version 2) [Provided by DSPy Library](https://github.com/stanfordnlp/dspy): 
-
-MIPROv2 is a prompt optimizer capable of optimizing both instructions and few-shot examples jointly. It does this by bootstrapping few-shot example candidates, proposing instructions grounded in different dynamics of the task, and finding an optimized combination of these options using Bayesian Optimization. It can be used for optimizing few-shot examples & instructions jointly, or just instructions for 0-shot optimization. 
-
-1. Step 1: Generate a good set of demos to show what the ideal input output pairs look like. 
-2. Step 2: Generate a good set of instructions(or prompts) that will likely generate the ideal input output pairs. 
-3. Step 3: Run a Bayesian Optimization algorithm to figure out the best instruction - demo pair that can be used to generate the most ideal prompt.
-
-**Requirements:** MIPROv2 requires Prompt Adapter, Dataset Adapter, Inference Adapter, and Metric Adapter.
-
-**Optimization Example**
-```python
-from amzn_nova_prompt_optimizer.core.optimizers.miprov2.miprov2_optimizer import MIPROv2OptimizationAdapter
-
-mipro_optimization_adapter = MIPROv2OptimizationAdapter(prompt_adapter=prompt_adapter, dataset_adapter=train_dataset_adapter, metric_adapter=metric_adapter)
-
-mipro_prompt_adapter = mipro_optimization_adapter.optimize(task_model_id="us.amazon.nova-lite-v1:0", enable_json_fallback=False)
+optimized_prompt_adapter = nova_prompt_optimizer.optimize(mode="custom", custom_params={"task_model_id": "us.amazon.nova-pro-v1:0",
+    "num_candidates": 10,
+    "num_trials": 15,
+    "max_bootstrapped_demos": 5,
+    "max_labeled_demos": 0
+})
 ```
 
-MIPROv2 uses Premier for Prompting and the task model provided as `task_model_id`. 
-By default, it uses "medium" optimization i.e. Generating 6 instruction candidates and num_trials proportional to it 
+Learn More about the Optimizers [here](docs/Optimizers.md)
 
-You can specify enable_json_fallback=False to disable the behavior that MIPROv2 will [fallback to use JSONAdapter to parse LM model output](https://github.com/stanfordnlp/dspy/blob/main/dspy/adapters/chat_adapter.py#L44-L51). This will force MIPROv2 use structured output (pydantic model) to parse LM output.
-
-## 6. Evaluator
+## Evaluator
 The SDK also provides a way to baseline prompts and provide evaluation scores.
 The evaluator has the `aggregate_score` and `scores` function.
-
-**Core Functions**
-```commandline
-# Runs Batch evaluation on the dataset using the batch_apply function of the metric
-.aggregate_score(model_id)
-
-# Runs evaluation on the dataset a row at a time and returns the eval results as a whole.
-.score(model_id)
-
-# Save the eval results
-.save()
-```
 
 **Initialization Example**
 ```python
@@ -509,8 +288,52 @@ evaluator = Evaluator(nova_mp_optimized_prompt_adapter, test_dataset_adapter, me
 
 nova_mp_score = evaluator.aggregate_score(model_id="us.amazon.nova-lite-v1:0")
 ```
+**Core Functions**
+
+Runs Batch evaluation on the dataset using the batch_apply function of the metric
+```python
+# Uses Batch Apply
+aggregate_score = evaluator.aggregate_score(model_id)
+```
+
+Runs evaluation on the dataset a row at a time and returns the eval results as a whole.
+```python
+# Uses Apply metric. Returns a list of scores.
+scores = evaluator.score(model_id)
+```
+
+Save the eval results.
+```python
+# Save the eval results
+evaluator.save("eval_results.jsonl")
+```
+
 
 **Note: You may come across the below warning. This is when prompt variables are missing from the prompt, the inference runner under the evaluator appends them to the end of the prompt for continuity**
 ```python
 WARNING amzn_nova_prompt_optimizer.core.inference: Warn: Prompt Variables not found in User Prompt, injecting them at the end of the prompt
 ```
+
+## Optimization Recommendations
+1. Provide representative real-world evaluation sets and split them into training and testing sets. Ensure dataset is balanced on output label when splitting train and test sets.
+2. For evaluation sets, the ground truth column should be as close to the inference output as possible. e.g. If the inference output is {"answer": "POSITIVE"} ground truth should also be in the same format {"answer": "POSITIVE"}
+3. For NovaPromptOptimizer, choose the mode (mode= "premier" | ""pro" | "lite" | "micro") based on your Nova Model of choice. By default, we use "pro".
+4. The `apply` function of the evaluation metric should return a numerical value between 0 and 1 for NovaPromptOptimizer or MIPROv2.
+
+## ⚠️ Preview Status
+
+NovaPromptOptimizer is currently in public preview. During this period:
+- SDK functionality might change as we support more use cases.
+- We welcome feedback and contributions
+
+## Interaction with AWS Bedrock
+
+NovaPromptOptimizer only uses AWS Bedrock for Model Calls.
+[Bedrock by default **disables** model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html).
+Data is not retained in the user's AWS account unless the user enables Bedrock Model Invocation logging.
+Data storage by Amazon Bedrock is independent of the use of the SDK.
+
+Please refer to [Amazon Bedrock's Data Protection Guide](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html) for additional guidance
+
+## Acknowledgements
+* Special acknowledgment to [DSPy](https://github.com/stanfordnlp/dspy) – your innovations continue to inspire us.

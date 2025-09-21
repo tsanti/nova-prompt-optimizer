@@ -1,0 +1,79 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Database files (generated during operations)
+*.db
+nova_optimizer.db
+
+# Generated data files
+uploads/
+downloads/
+data/
+results/
+output/
+exports/
+
+# Generated datasets and files
+*.json
+*.csv
+*.jsonl
+*.xlsx
+*.parquet
+
+# Temporary files
+temp_results/
+temp_*
+*.tmp
+*.temp
+
+# Generated prompts and optimizations
+optimized_prompts/
+prompt_outputs/
+optimization_results/
+
+# Configuration files
+opt_conf/
+
+# Coverage and test artifacts
+.coverage
+.pytest_cache/
+htmlcov/
+test-results/
+tests/
+
+# Session files
+.sesskey
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Amazon Q and development tools
+.amazonq/
+.kiro/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

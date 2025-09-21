@@ -1,0 +1,68 @@
+# Keep root directory clean - all application files should be in frontend/
+*.db
+*.log
+uploads/
+data/
+optimized_prompts/
+logs/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Cleanup script
+cleanup.sh
+# Frontend runtime files
+frontend/opt_conf/
+frontend/optimized_prompts/
+frontend/uploads/
+frontend/nova_optimizer.db
+
+# Virtual environments (any venv pattern in root)
+venv*/
+.venv*/
+
+# Amazon Q internal documentation and analysis
+.amazonq/
+
+# Kiro files
+.kiro/
+
+# GitHub workflow files (if not needed in public repo)
+
+# Jupyter Notebook checkpoints (in any directory)
+**/.ipynb_checkpoints/
+.amazonq/
