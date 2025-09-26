@@ -386,11 +386,18 @@ class RelevanceMetric(MetricAdapter):
     def get_datasets(self) -> List[Dict]:
         """Get all datasets"""
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        
+        # Check if file_path column exists
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(datasets)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_file_path = 'file_path' in columns
+        
         cursor = conn.execute("SELECT * FROM datasets ORDER BY created_at DESC")
         
         datasets = []
         for row in cursor.fetchall():
-            datasets.append({
+            dataset = {
                 "id": row[0],
                 "name": row[1],
                 "type": row[2],  # dataset_type from database
@@ -398,7 +405,16 @@ class RelevanceMetric(MetricAdapter):
                 "rows": row[4],
                 "created": row[5],
                 "status": row[6]
-            })
+            }
+            
+            # Add file_path if column exists and has value
+            # The file_path is in the last column
+            if has_file_path and len(row) > 7:
+                file_path = row[-1]  # Get the last column (file_path)
+                if file_path and file_path != row[5]:  # Make sure it's not the created date
+                    dataset["file_path"] = file_path
+            
+            datasets.append(dataset)
         
         conn.close()
         return datasets
@@ -886,12 +902,21 @@ class RelevanceMetric(MetricAdapter):
         dataset_id = f"dataset_{uuid.uuid4().hex[:8]}"
         
         conn = self.get_connection()
+        
+        # Check if file_path column exists, add it if not
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(datasets)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'file_path' not in columns:
+            conn.execute("ALTER TABLE datasets ADD COLUMN file_path TEXT")
+        
         conn.execute("""
-            INSERT INTO datasets (id, name, dataset_type, size, rows, created, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO datasets (id, name, dataset_type, size, rows, created, status, file_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             dataset_id, name, file_type, file_size, row_count,
-            datetime.now().strftime("%Y-%m-%d"), "Ready"
+            datetime.now().strftime("%Y-%m-%d"), "Ready", file_path
         ))
         conn.commit()
         conn.close()
@@ -902,6 +927,17 @@ class RelevanceMetric(MetricAdapter):
         datasets = self.get_datasets()
         dataset = next((d for d in datasets if d["id"] == dataset_id), None)
         if dataset:
+            print(f"=== GET_DATASET_FILE_PATH DEBUG ===")
+            print(f"Dataset ID: {dataset_id}")
+            print(f"Dataset: {dataset}")
+            
+            # First check if file_path is stored directly
+            if 'file_path' in dataset and dataset['file_path']:
+                from pathlib import Path
+                if Path(dataset['file_path']).exists():
+                    print(f"Found direct file path: {dataset['file_path']}")
+                    return dataset['file_path']
+            
             # Check multiple possible file path patterns
             from pathlib import Path
             
@@ -915,18 +951,26 @@ class RelevanceMetric(MetricAdapter):
                 f"uploads/{dataset['name']}{extension}"
             ]
             
+            print(f"Trying patterns: {patterns}")
+            
             # Try each pattern
             for pattern in patterns:
+                print(f"Checking pattern: {pattern}")
                 if Path(pattern).exists():
+                    print(f"Found file: {pattern}")
                     return pattern
             
             # If no exact match, look for any file containing the dataset_id
             uploads_dir = Path("uploads")
             if uploads_dir.exists():
+                print(f"Searching uploads directory for files containing: {dataset_id}")
                 for file_path in uploads_dir.glob("*"):
+                    print(f"Checking file: {file_path.name}")
                     if dataset_id in file_path.name:
+                        print(f"Found matching file: {file_path}")
                         return str(file_path)
         
+        print(f"No file found for dataset {dataset_id}")
         return None
     
     def add_prompt_candidate(self, optimization_id: str, candidate_number: int, prompt_text: str, model_response: str = None, score: float = None):

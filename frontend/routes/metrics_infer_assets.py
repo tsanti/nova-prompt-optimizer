@@ -109,6 +109,11 @@ def setup_infer_assets_routes(app):
             # Analyze assets and suggest metrics
             metric_service = MetricService()
             dataset_path = db.get_dataset_file_path(dataset_id)
+            
+            print(f"=== METRICS ROUTE DEBUG ===")
+            print(f"Dataset ID: {dataset_id}")
+            print(f"Dataset path returned: {dataset_path}")
+            
             analysis_result = metric_service.analyze_dataset_for_metrics(
                 dataset_path=dataset_path,
                 prompt_data=prompt,

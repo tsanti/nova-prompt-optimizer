@@ -1,13 +1,20 @@
 # Core FastHTML dependencies
-fasthtml
+python-fasthtml
 starlette
 python-multipart
+shad4fast
 
 # Nova Prompt Optimizer SDK
 nova-prompt-optimizer
 
 # AWS SDK
 boto3
+
+#pydantic
+pydantic_settings
+
+#feature
+pandas
 
 # Basic Python libraries (built-in, no installation needed)
 # - json (built-in)

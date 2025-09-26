@@ -75,55 +75,68 @@ class SampleGeneratorService:
         self.sessions: Dict[str, GenerationSession] = {}
     
     def generate_unique_questions(self, checklist, model_id: str) -> Dict[str, Any]:
-        """Generate 5 unique questions for the dataset"""
+        """Generate 5 unique samples based on the original prompt"""
         try:
+            # Use the actual prompt content to infer what to generate
+            prompt_content = getattr(checklist, 'original_prompt', '') or getattr(checklist, 'prompt_content', '')
+            
             prompt = f"""
-            Generate 5 unique, varied technology support questions from senior citizens.
+            Analyze this prompt and generate 5 diverse training samples for it:
             
-            Context:
-            - Role: {checklist.role_persona}
-            - Domain: {checklist.domain_expertise}
-            - Input Type: {checklist.input_format}
+            PROMPT TO ANALYZE:
+            {prompt_content}
             
-            Create 5 different questions covering various tech issues:
-            1. WiFi/Internet connectivity
-            2. Email problems
-            3. Printing issues
-            4. Software/application troubles
-            5. Computer hardware concerns
+            Based on the prompt above:
+            1. Identify what type of inputs it expects
+            2. Understand the expected output format
+            3. Generate 5 varied, realistic examples that would work with this prompt
             
-            Make each question realistic and varied in:
-            - Problem type
-            - Language style
-            - Level of detail
-            - Emotional tone
+            Make each sample:
+            - Realistic and varied in content with detailed, comprehensive responses
+            - Different scenarios/contexts covering various edge cases
+            - Appropriate for the prompt's domain with rich context
+            - Diverse in complexity and style, ranging from simple to complex cases
+            - Longer, more detailed inputs and outputs (aim for 2-3 sentences minimum for inputs, detailed responses for outputs)
             
-            Return JSON array: ["question 1", "question 2", "question 3", "question 4", "question 5"]
+            Return JSON array with objects: [{{"input": "detailed sample input with context", "output": "comprehensive expected output"}}, ...]
             """
             
             response = self._call_bedrock_with_model(prompt, model_id)
             
             try:
-                # Remove markdown if present
+                # Clean up the response text
                 response_text = response.strip()
+                
+                # Remove markdown code blocks
                 if response_text.startswith('```json'):
                     response_text = response_text[7:]
+                elif response_text.startswith('```'):
+                    response_text = response_text[3:]
+                    
                 if response_text.endswith('```'):
                     response_text = response_text[:-3]
+                
                 response_text = response_text.strip()
                 
-                questions = json.loads(response_text, strict=False)
+                # Try to find JSON array in the response
+                import re
+                json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+                if json_match:
+                    response_text = json_match.group(0)
                 
-                if isinstance(questions, list) and len(questions) == 5:
+                samples = json.loads(response_text, strict=False)
+                
+                if isinstance(samples, list) and len(samples) > 0:
                     return {
                         "success": True,
-                        "questions": questions
+                        "samples": samples
                     }
                 else:
                     return {"success": False, "error": "Invalid questions format"}
                     
             except json.JSONDecodeError as e:
                 print(f"JSON decode error: {e}")
+                print(f"Response text: {response_text[:500]}...")
                 return {"success": False, "error": f"Invalid JSON response: {str(e)}"}
                 
         except Exception as e:
@@ -464,20 +477,54 @@ class SampleGeneratorService:
     def _parse_generated_samples(self, samples_text: str, session_id: str, iteration: int = 0) -> List[SampleRecord]:
         """Parse AI-generated samples into SampleRecord objects"""
         
+        print(f"=== PARSE_GENERATED_SAMPLES DEBUG ===")
+        print(f"Raw input: {samples_text[:500]}...")
+        
         samples = []
         
         try:
-            # Try to parse as JSON array first
-            if samples_text.strip().startswith('['):
-                json_samples = json.loads(samples_text)
-                for i, sample in enumerate(json_samples):
-                    samples.append(SampleRecord(
-                        id=f"{session_id}_sample_{iteration}_{i}",
-                        input_text=sample.get('input', ''),
-                        answer_text=sample.get('answer', '')
-                    ))
+            # Clean up markdown and extract JSON
+            cleaned_text = samples_text.strip()
+            
+            # Remove markdown code blocks
+            import re
+            
+            # First try to find ```json blocks
+            json_blocks = re.findall(r'```json\s*(.*?)\s*```', cleaned_text, re.DOTALL | re.IGNORECASE)
+            if json_blocks:
+                cleaned_text = json_blocks[0]
+                print(f"Found JSON block: {cleaned_text[:200]}...")
             else:
-                # Parse individual JSON objects
+                # Try to find any ``` blocks
+                code_blocks = re.findall(r'```\s*(.*?)\s*```', cleaned_text, re.DOTALL)
+                if code_blocks:
+                    cleaned_text = code_blocks[0]
+                    print(f"Found code block: {cleaned_text[:200]}...")
+            
+            # Try to extract JSON array from anywhere in the text
+            json_match = re.search(r'\[\s*\{.*?\}\s*\]', cleaned_text, re.DOTALL)
+            if json_match:
+                cleaned_text = json_match.group(0)
+                print(f"Extracted JSON array: {cleaned_text[:200]}...")
+            
+            # Parse the JSON
+            json_samples = json.loads(cleaned_text)
+            print(f"Successfully parsed {len(json_samples)} samples")
+            
+            for i, sample in enumerate(json_samples):
+                print(f"Sample {i}: {sample}")
+                samples.append(SampleRecord(
+                    id=f"{session_id}_sample_{iteration}_{i}",
+                    input_text=sample.get('input', ''),
+                    answer_text=sample.get('output', sample.get('answer', ''))
+                ))
+                
+        except Exception as e:
+            print(f"JSON parsing failed: {e}")
+            print(f"Trying line-by-line parsing...")
+            
+            # Fallback: try line-by-line parsing
+            try:
                 lines = samples_text.strip().split('\n')
                 sample_count = 0
                 
@@ -489,27 +536,24 @@ class SampleGeneratorService:
                             samples.append(SampleRecord(
                                 id=f"{session_id}_sample_{iteration}_{sample_count}",
                                 input_text=sample_data.get('input', ''),
-                                answer_text=sample_data.get('answer', '')
+                                answer_text=sample_data.get('output', sample_data.get('answer', ''))
                             ))
                             sample_count += 1
+                            print(f"Parsed line sample {sample_count}")
                         except json.JSONDecodeError:
                             continue
+            except Exception as e2:
+                print(f"Line parsing also failed: {e2}")
                 
-                # If no JSON found, try to extract from text
-                if not samples:
-                    samples = self._extract_samples_from_text(samples_text, session_id, iteration)
+                # Last resort: create error samples
+                samples = [SampleRecord(
+                    id=f"{session_id}_error_0",
+                    input_text="Error parsing AI response",
+                    answer_text=f"Could not parse: {str(e)}"
+                )]
         
-        except Exception as e:
-            print(f"Error parsing samples: {e}")
-            # Fallback: create placeholder samples
-            for i in range(5):
-                samples.append(SampleRecord(
-                    id=f"{session_id}_sample_{iteration}_{i}",
-                    input_text=f"Sample input {i+1}",
-                    answer_text=f"Sample answer {i+1}"
-                ))
-        
-        return samples[:5]  # Ensure exactly 5 samples
+        print(f"Returning {len(samples)} samples")
+        return samples[:5]  # Ensure max 5 samples
     
     def _extract_samples_from_text(self, text: str, session_id: str, iteration: int) -> List[SampleRecord]:
         """Extract samples from unstructured text"""
@@ -653,8 +697,8 @@ class SampleGeneratorService:
         """Convert SampleRecord to dictionary"""
         return {
             "id": sample.id,
-            "input": sample.input_text,
-            "answer": sample.answer_text,
+            "input_text": sample.input_text,
+            "answer_text": sample.answer_text,
             "annotations": sample.annotations,
             "quality_score": sample.quality_score
         }
@@ -683,3 +727,243 @@ class SampleGeneratorService:
         except Exception as e:
             print(f"Unexpected error calling Bedrock: {e}")
             raise
+
+    def improve_samples(self, session_id: str, annotations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Regenerate samples based on user annotations and feedback"""
+        try:
+            print(f"=== IMPROVE_SAMPLES DEBUG ===")
+            print(f"Session ID: {session_id}")
+            print(f"Available sessions: {list(self.sessions.keys())}")
+            
+            if session_id not in self.sessions:
+                print(f"ERROR: Session {session_id} not found")
+                return {"success": False, "error": "Session not found"}
+            
+            session = self.sessions[session_id]
+            print(f"Session found: {session}")
+            print(f"Session samples count: {len(session.samples)}")
+            
+            # Process annotations to update samples
+            for annotation in annotations:
+                sample_id = annotation.get('id')
+                feedback = annotation.get('feedback', '')
+                corrected_output = annotation.get('corrected_output', '')
+                print(f"Processing annotation - ID: {sample_id}, Feedback: {feedback}")
+                
+                # Find and update the sample
+                for sample in session.samples:
+                    if sample.id == sample_id:
+                        if corrected_output:
+                            sample.answer_text = corrected_output
+                            print(f"Updated sample {sample_id} output")
+                        if feedback:
+                            # Store feedback in annotations list
+                            if not hasattr(sample, 'annotations') or sample.annotations is None:
+                                sample.annotations = []
+                            sample.annotations.append(feedback)
+                            print(f"Added feedback to sample {sample_id}")
+                        break
+            
+            # Generate feedback summary for regeneration
+            feedback_summary = self._analyze_annotations(session.samples)
+            print(f"Feedback summary: {feedback_summary}")
+            
+            # Create improved prompt based on feedback
+            improved_prompt = f"""
+Based on the following feedback from sample annotations:
+
+{feedback_summary}
+
+Original prompt: {session.generation_prompt}
+
+Generate 5 improved samples that address the feedback. Each sample should:
+1. Follow the corrected patterns shown in annotations
+2. Avoid the issues mentioned in feedback
+3. Maintain variety while improving quality
+
+Output format: JSON array with objects containing 'input' and 'output' fields.
+"""
+            
+            print(f"Calling Bedrock with improved prompt...")
+            # Generate improved samples
+            response = self._call_bedrock(improved_prompt)
+            print(f"Bedrock response: {response[:200]}...")
+            
+            new_samples = self._parse_generated_samples(response, session_id, session.iteration_count)
+            print(f"Parsed {len(new_samples)} new samples")
+            
+            # Update session with improved samples
+            session.samples = new_samples
+            session.iteration_count += 1
+            session.feedback_summary = feedback_summary
+            
+            result = {
+                "success": True,
+                "samples": [self._sample_to_dict(s) for s in new_samples],
+                "message": f"Generated {len(new_samples)} improved samples based on your feedback"
+            }
+            print(f"Returning result: {result}")
+            return result
+            
+        except Exception as e:
+            print(f"ERROR in improve_samples: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+
+    def generate_more_samples(self, session_id: str, num_samples: int = 10) -> Dict[str, Any]:
+        """Generate additional samples using existing samples as few-shot examples"""
+        try:
+            print(f"=== GENERATE_MORE_SAMPLES DEBUG ===")
+            print(f"Requested samples: {num_samples}")
+            
+            if session_id not in self.sessions:
+                return {"success": False, "error": "Session not found"}
+            
+            session = self.sessions[session_id]
+            
+            if not session.samples:
+                return {"success": False, "error": "No existing samples to use as examples"}
+            
+            # Use best samples as few-shot examples (samples without negative feedback)
+            good_samples = [s for s in session.samples if not hasattr(s, 'feedback') or not s.feedback or 'good' in s.feedback.lower()]
+            if not good_samples:
+                good_samples = session.samples[:3]  # Use first 3 if no explicitly good ones
+            
+            # Create few-shot prompt
+            few_shot_examples = []
+            for sample in good_samples[:5]:  # Max 5 examples
+                few_shot_examples.append(f"Input: {sample.input_text}\nOutput: {sample.answer_text}")
+            
+            few_shot_text = "\n\n".join(few_shot_examples)
+            
+            # Generate samples in batches (max 10 per call to avoid token limits)
+            all_new_samples = []
+            batch_size = min(10, num_samples)
+            num_batches = (num_samples + batch_size - 1) // batch_size  # Ceiling division
+            
+            print(f"Generating {num_samples} samples in {num_batches} batches of {batch_size}")
+            
+            for batch_num in range(num_batches):
+                remaining_samples = num_samples - len(all_new_samples)
+                current_batch_size = min(batch_size, remaining_samples)
+                
+                print(f"Batch {batch_num + 1}/{num_batches}: generating {current_batch_size} samples")
+                
+                expansion_prompt = f"""
+You are generating additional samples for a dataset. Use the following examples as a guide for the style, format, and quality expected:
+
+EXAMPLES:
+{few_shot_text}
+
+Original task: {session.generation_prompt}
+
+Generate {current_batch_size} NEW samples that:
+1. Follow the same format and style as the examples
+2. Cover different scenarios and variations
+3. Maintain the same quality and detail level
+4. Are diverse and don't repeat the examples or previous batches
+
+Output format: JSON array with objects containing 'input' and 'output' fields.
+"""
+                
+                # Generate batch of samples
+                response = self._call_bedrock(expansion_prompt)
+                batch_samples = self._parse_generated_samples(response, session_id, session.iteration_count + batch_num)
+                
+                print(f"Batch {batch_num + 1} generated {len(batch_samples)} samples")
+                all_new_samples.extend(batch_samples)
+                
+                # Stop if we have enough samples
+                if len(all_new_samples) >= num_samples:
+                    break
+            
+            # Trim to exact number requested
+            all_new_samples = all_new_samples[:num_samples]
+            print(f"Total generated: {len(all_new_samples)} samples")
+            
+            # Add to existing samples
+            session.samples.extend(all_new_samples)
+            session.iteration_count += 1
+            
+            return {
+                "success": True,
+                "samples": [self._sample_to_dict(s) for s in all_new_samples],
+                "total_samples": len(session.samples),
+                "message": f"Generated {len(all_new_samples)} additional samples using {len(good_samples)} examples"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def finalize_dataset(self, session_id: str, dataset_name: str) -> Dict[str, Any]:
+        """Finalize and save the generated dataset"""
+        try:
+            import os
+            import json
+            from datetime import datetime
+            
+            print(f"=== FINALIZE_DATASET DEBUG ===")
+            print(f"Session ID: {session_id}")
+            print(f"Dataset name: {dataset_name}")
+            
+            if session_id not in self.sessions:
+                return {"success": False, "error": "Session not found"}
+            
+            session = self.sessions[session_id]
+            
+            if not session.samples:
+                return {"success": False, "error": "No samples to save"}
+            
+            # Convert samples to JSON format
+            dataset_samples = []
+            for sample in session.samples:
+                dataset_samples.append({
+                    "input": sample.input_text,
+                    "output": sample.answer_text
+                })
+            
+            # Create dataset content
+            dataset_content = {
+                "name": dataset_name,
+                "description": f"Generated dataset with {len(dataset_samples)} samples",
+                "samples": dataset_samples,
+                "metadata": {
+                    "generation_prompt": session.generation_prompt,
+                    "total_samples": len(dataset_samples),
+                    "iterations": session.iteration_count,
+                    "created_at": str(datetime.now())
+                }
+            }
+            
+            # Save to file
+            # Create uploads directory if it doesn't exist (same as uploaded datasets)
+            uploads_dir = "uploads"
+            os.makedirs(uploads_dir, exist_ok=True)
+            
+            # Generate filename
+            safe_name = "".join(c for c in dataset_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_name = safe_name.replace(' ', '_')
+            filename = f"{safe_name}_{session_id}.jsonl"
+            file_path = os.path.join(uploads_dir, filename)
+            
+            # Save as JSONL format (one JSON object per line)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                for sample in dataset_samples:
+                    f.write(json.dumps(sample) + '\n')
+            
+            print(f"Saved {len(dataset_samples)} samples to {file_path}")
+            
+            return {
+                "success": True,
+                "message": f"Successfully saved {len(dataset_samples)} samples",
+                "file_path": file_path,
+                "filename": filename,
+                "sample_count": len(dataset_samples)
+            }
+            
+        except Exception as e:
+            print(f"ERROR in finalize_dataset: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}

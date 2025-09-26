@@ -340,6 +340,13 @@ class {class_name}(MetricAdapter):
         import random
         
         try:
+            # Check if dataset_path is valid
+            if not dataset_path:
+                return {
+                    "success": False,
+                    "error": "Dataset path is missing or invalid"
+                }
+            
             # Sample dataset
             if dataset_path.endswith('.jsonl'):
                 with open(dataset_path, 'r') as f:
@@ -482,28 +489,56 @@ Return your response in this JSON format:
         print(f"🔍 DEBUG - Composite prompt created, length: {len(composite_prompt)}")
         
         try:
-            # Generate composite metric code using Nova
-            print(f"🔍 DEBUG - Calling Bedrock for composite metric generation")
+            # Use structured output to enforce correct MetricAdapter structure
+            schema = {
+                "type": "object",
+                "properties": {
+                    "metric_code": {
+                        "type": "string",
+                        "description": "Complete Python class inheriting from MetricAdapter with required methods: __init__, _calculate_metrics, apply, batch_apply, and ending with 'metric_adapter = CompositeMetric()'"
+                    }
+                },
+                "required": ["metric_code"],
+                "additionalProperties": False
+            }
+            
+            print(f"🔍 DEBUG - Using structured output to enforce MetricAdapter structure")
             response = self.bedrock.invoke_model(
                 modelId="us.amazon.nova-pro-v1:0",
                 body=json.dumps({
                     "messages": [
                         {
                             "role": "user", 
-                            "content": [{"text": composite_prompt}]
+                            "content": [{"text": composite_prompt + "\n\nIMPORTANT: You must generate a class that inherits from MetricAdapter with these exact methods: __init__, _calculate_metrics(y_pred, y_true), apply(y_pred, y_true), batch_apply(y_preds, y_trues), and end with 'metric_adapter = CompositeMetric()'"}]
                         }
                     ],
                     "inferenceConfig": {
                         "maxTokens": 4000,
                         "temperature": 0.1
+                    },
+                    "toolConfig": {
+                        "tools": [{
+                            "toolSpec": {
+                                "name": "generate_metric_adapter",
+                                "description": "Generate a MetricAdapter class with the exact required structure",
+                                "inputSchema": {
+                                    "json": schema
+                                }
+                            }
+                        }],
+                        "toolChoice": {"tool": {"name": "generate_metric_adapter"}}
                     }
                 })
             )
             
             response_body = json.loads(response['body'].read())
-            generated_code = response_body['output']['message']['content'][0]['text']
-            print(f"🔍 DEBUG - Generated code length: {len(generated_code)}")
-            print(f"🔍 DEBUG - RAW BEDROCK OUTPUT:")
+            
+            # Extract from structured output
+            tool_use = response_body['output']['message']['content'][0]['toolUse']
+            generated_code = tool_use['input']['metric_code']
+            
+            print(f"🔍 DEBUG - Generated structured code length: {len(generated_code)}")
+            print(f"🔍 DEBUG - STRUCTURED OUTPUT:")
             print("=" * 80)
             print(generated_code)
             print("=" * 80)
@@ -534,25 +569,14 @@ Return your response in this JSON format:
                     composite_name = "Composite Metric"
                     num_metrics = 0
                 
-                print(f"🔍 DEBUG - About to save metric: {composite_name}")
+                print(f"🔍 DEBUG - Generated composite metric: {composite_name}")
                 
-                # Save to database
-                metric_id = db.create_metric(
-                    name=composite_name,
-                    description=f"AI-generated composite metric combining {num_metrics} evaluation criteria",
-                    dataset_format="JSON",
-                    scoring_criteria="Composite scoring based on multiple weighted metrics",
-                    generated_code=cleaned_code,
-                    natural_language_input="Generated from multiple metric specifications"
-                )
-                
-                print(f"✅ DEBUG - Saved composite metric to database with ID: {metric_id}")
-                
-            except Exception as db_error:
-                print(f"❌ DEBUG - Database save error: {type(db_error).__name__}: {db_error}")
+            except Exception as generation_error:
+                print(f"❌ DEBUG - Code generation error: {type(generation_error).__name__}: {generation_error}")
                 import traceback
                 traceback.print_exc()
-                # Continue anyway since the code generation worked
+                # Re-raise since code generation failed
+                raise generation_error
             
             return cleaned_code
             
@@ -594,15 +618,18 @@ Return your response in this JSON format:
         print(extracted_code)
         print("=" * 40)
         
-        # Validate the code has required components
+        # Validate the code has required components (flexible to match AI output)
         required_components = [
             'class CompositeMetric',
-            'def parse_json',
-            'def _calculate_metrics',
-            'def apply',
-            'def batch_apply',
             'metric_adapter = CompositeMetric()'
         ]
+        
+        # Check for either the old method structure or new method structure
+        has_old_structure = all(method in extracted_code for method in ['def _calculate_metrics', 'def apply', 'def batch_apply'])
+        has_new_structure = 'def evaluate' in extracted_code
+        
+        if not (has_old_structure or has_new_structure):
+            required_components.extend(['def apply', 'def batch_apply'])  # Require old structure if new not found
         
         missing_components = []
         for component in required_components:
@@ -610,9 +637,24 @@ Return your response in this JSON format:
                 missing_components.append(component)
         
         if missing_components:
-            error_msg = f"Generated code is missing required components: {missing_components}"
-            print(f"❌ DEBUG - {error_msg}")
-            raise ValueError(error_msg)
+            # If we have evaluate method but missing apply/batch_apply, add them
+            if 'def evaluate' in extracted_code and any('def apply' in comp or 'def batch_apply' in comp for comp in missing_components):
+                # Add compatibility methods
+                compatibility_methods = """
+    def apply(self, y_pred: Any, y_true: Any):
+        return self.evaluate([y_pred], [y_true])
+
+    def batch_apply(self, y_preds: List[Any], y_trues: List[Any]):
+        return self.evaluate(y_preds, y_trues)
+"""
+                extracted_code = extracted_code.replace('metric_adapter = CompositeMetric()', compatibility_methods + '\nmetric_adapter = CompositeMetric()')
+                # Remove these from missing components
+                missing_components = [comp for comp in missing_components if 'def apply' not in comp and 'def batch_apply' not in comp]
+            
+            if missing_components:
+                error_msg = f"Generated code is missing required components: {missing_components}"
+                print(f"❌ DEBUG - {error_msg}")
+                raise ValueError(error_msg)
         
         # Check for forbidden imports
         forbidden_imports = ['sklearn', 'numpy', 'pandas', 'statsmodels', 'scipy']

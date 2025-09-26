@@ -848,7 +848,22 @@ def run_optimization_worker(optimization_id: str, config: dict = None):
             metric_adapter=metric_adapter,
         )
 
-        model_mode = config.get("model_mode", "lite")
+        # Map model_id to model_mode if model_mode not provided
+        model_mode = config.get("model_mode")
+        if not model_mode:
+            model_id = config.get("model_id", "us.amazon.nova-lite-v1:0")
+            # Extract mode from model_id (e.g., "us.amazon.nova-pro-v1:0" -> "pro")
+            if "nova-lite" in model_id:
+                model_mode = "lite"
+            elif "nova-pro" in model_id:
+                model_mode = "pro"
+            elif "nova-micro" in model_id:
+                model_mode = "micro"
+            elif "nova-premier" in model_id:
+                model_mode = "premier"
+            else:
+                model_mode = "lite"  # fallback
+        
         rate_limit = config.get("rate_limit", 2)
 
         # ATTEMPT: Set maximum possible tokens for the model
@@ -1140,9 +1155,19 @@ def run_optimization_worker(optimization_id: str, config: dict = None):
 
                 flattened_data = []
                 for sample in test_dataset.standardized_dataset:
+                    # Handle different output key names (answer, output, etc.)
+                    output_key = None
+                    if "answer" in sample["outputs"]:
+                        output_key = "answer"
+                    elif "output" in sample["outputs"]:
+                        output_key = "output"
+                    else:
+                        # Use the first available key
+                        output_key = list(sample["outputs"].keys())[0]
+                    
                     flattened_sample = {
                         "input": sample["inputs"]["input"],
-                        "answer": sample["outputs"]["answer"],
+                        "answer": sample["outputs"][output_key],
                     }
                     flattened_data.append(flattened_sample)
 

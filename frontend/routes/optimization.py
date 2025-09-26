@@ -640,7 +640,32 @@ def setup_optimization_routes(app):
         return create_main_layout(
             "Optimization Results",
             Div(*content),
-            current_page="optimization"
+            current_page="optimization",
+            extra_head=Script("""
+                function optimizeFurther(optimizationId) {
+                    if (confirm('Start further optimization? This will create a new optimization using the current results as a starting point.')) {
+                        fetch(`/optimization/${optimizationId}/optimize-further`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Further optimization started! Redirecting to new optimization...');
+                                window.location.href = `/optimization/results/${data.new_optimization_id}`;
+                            } else {
+                                alert('Error: ' + (data.error || 'Unknown error'));
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error starting further optimization');
+                        });
+                    }
+                }
+            """)
         )
 
     @app.get("/optimization/candidate/{optimization_id}/{candidate_index}")

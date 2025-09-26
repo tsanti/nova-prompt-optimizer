@@ -45,8 +45,16 @@ def setup_dataset_routes(app):
                     P("Manage your datasets for prompt optimization", cls="text-muted-foreground mb-4"),
                     Div(
                         Button("Upload Dataset", onclick="showUploadForm()", cls="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 py-1 text-xs mr-2"),
-                        Button("Simple Generator", onclick="window.location.href='/simple-generator'", cls="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 py-1 text-xs"),
-                        cls="flex gap-2"
+                        cls="flex gap-2 mb-3"
+                    ),
+                    Div(
+                        H3("Dataset Generators", cls="text-lg font-semibold mb-2"),
+                        Div(
+                            Button("Smart Generator", onclick="window.location.href='/datasets/generator'", cls="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/90 h-8 px-3 py-1 text-xs mr-2"),
+                            Button("Simple Generator", onclick="window.location.href='/simple-generator'", cls="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 py-1 text-xs"),
+                            cls="flex gap-2"
+                        ),
+                        P("Smart Generator: Full workflow with annotation, regeneration & expansion | Simple Generator: Basic sample generation", cls="text-sm text-muted-foreground mt-2")
                     )
                 )
             ),
