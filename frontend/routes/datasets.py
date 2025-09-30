@@ -178,13 +178,27 @@ def setup_dataset_routes(app):
             # Get file info
             file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
             
-            # Count rows based on file type
+            # Count rows based on file type with encoding detection
+            def safe_read_file(file_path):
+                """Safely read file with encoding detection"""
+                encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+                for encoding in encodings:
+                    try:
+                        with open(file_path, 'r', encoding=encoding) as f:
+                            return f.read(), encoding
+                    except UnicodeDecodeError:
+                        continue
+                # If all encodings fail, read as binary and decode with errors='ignore'
+                with open(file_path, 'rb') as f:
+                    content = f.read().decode('utf-8', errors='ignore')
+                    return content, 'utf-8-ignore'
+            
             if file_type == "CSV":
-                with open(file_path, 'r') as f:
-                    row_count = sum(1 for line in f) - 1  # Subtract header
+                content, encoding = safe_read_file(file_path)
+                row_count = len(content.splitlines()) - 1  # Subtract header
             else:  # JSONL
-                with open(file_path, 'r') as f:
-                    row_count = sum(1 for line in f if line.strip())  # Count non-empty lines
+                content, encoding = safe_read_file(file_path)
+                row_count = len([line for line in content.splitlines() if line.strip()])  # Count non-empty lines
             
             # Save to database
             db = Database()

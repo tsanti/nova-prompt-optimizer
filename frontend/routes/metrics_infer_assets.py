@@ -122,7 +122,7 @@ def setup_infer_assets_routes(app):
             )
             
             if not analysis_result['success']:
-                return HTMLResponse(f'<script>alert("Analysis failed: {analysis_result["error"]}"); window.history.back();</script>')
+                return HTMLResponse(f'<script>alert("Analysis failed: {analysis_result["error"]}\\n\\nPlease try running the analysis again."); window.history.back();</script>')
             
             # Store analysis in session for next step
             session_data = {

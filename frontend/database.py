@@ -428,34 +428,49 @@ class RelevanceMetric(MetricAdapter):
         row = cursor.fetchone()
         
         if row:
-            # Get the actual content from file - try multiple naming patterns
-            possible_paths = [
-                f"uploads/{row[1]}_{row[0]}.jsonl",  # name_id.jsonl
-                f"uploads/{row[0]}.jsonl",           # id.jsonl
-                f"uploads/{row[1]}.jsonl"            # name.jsonl
-            ]
-            
-            # Also try pattern matching for generated files
-            import os
-            import glob
-            if os.path.exists("uploads/"):
-                # Look for files containing the dataset name or ID
-                pattern_files = []
-                pattern_files.extend(glob.glob(f"uploads/*{row[0]}*.jsonl"))
-                pattern_files.extend(glob.glob(f"uploads/*{row[1].replace(' ', '_')}*.jsonl"))
-                possible_paths.extend(pattern_files)
+            # Use the stored file_path (column index 7) if available
+            stored_file_path = row[7] if len(row) > 7 and row[7] else None
             
             content = ""
             file_found = False
-            for file_path in possible_paths:
+            
+            if stored_file_path:
+                # Try the stored path first
                 try:
-                    with open(file_path, 'r') as f:
+                    with open(stored_file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
                         file_found = True
-                        print(f"✅ Found dataset file: {file_path}")
-                        break
-                except:
-                    continue
+                        print(f"✅ Found dataset file at stored path: {stored_file_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not read stored path {stored_file_path}: {e}")
+            
+            # Fallback to guessing paths if stored path failed
+            if not file_found:
+                possible_paths = [
+                    f"uploads/{row[1]}_{row[0]}.jsonl",  # name_id.jsonl
+                    f"uploads/{row[0]}.jsonl",           # id.jsonl
+                    f"uploads/{row[1]}.jsonl"            # name.jsonl
+                ]
+                
+                # Also try pattern matching for generated files
+                import os
+                import glob
+                if os.path.exists("uploads/"):
+                    # Look for files containing the dataset name or ID
+                    pattern_files = []
+                    pattern_files.extend(glob.glob(f"uploads/*{row[0]}*.jsonl"))
+                    pattern_files.extend(glob.glob(f"uploads/*{row[1].replace(' ', '_')}*.jsonl"))
+                    possible_paths.extend(pattern_files)
+                
+                for file_path in possible_paths:
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            file_found = True
+                            print(f"✅ Found dataset file: {file_path}")
+                            break
+                    except:
+                        continue
             
             if not file_found:
                 # Log available files for debugging

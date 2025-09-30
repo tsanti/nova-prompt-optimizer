@@ -564,6 +564,9 @@ def setup_optimization_routes(app):
                     P(f"Status: {optimization.get('status', 'N/A')}", cls="mb-2"),
                     P(f"Completed: {optimization.get('completed', 'N/A')}", cls="mb-2"),
                     P(f"Improvement: +{improvement_pct}" if improvement_pct != 'N/A' else "Improvement: N/A", cls="mb-4 text-green-600 font-medium"),
+                    Button("Save Optimized Prompt", 
+                           onclick=f"saveOptimizedPrompt('{optimization_id}')",
+                           cls="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-green-600 text-white hover:bg-green-700 h-8 px-3 py-1 text-xs mr-2"),
                     Button("Optimize Further", 
                            onclick=f"optimizeFurther('{optimization_id}')",
                            cls="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 py-1 text-xs mr-2"),
@@ -641,7 +644,7 @@ def setup_optimization_routes(app):
             "Optimization Results",
             Div(*content),
             current_page="optimization",
-            extra_head=Script("""
+            extra_head=[Script("""
                 function optimizeFurther(optimizationId) {
                     if (confirm('Start further optimization? This will create a new optimization using the current results as a starting point.')) {
                         fetch(`/optimization/${optimizationId}/optimize-further`, {
@@ -665,7 +668,37 @@ def setup_optimization_routes(app):
                         });
                     }
                 }
-            """)
+                
+                function saveOptimizedPrompt(optimizationId) {
+                    const promptName = prompt('Enter a name for the optimized prompt:');
+                    if (promptName && promptName.trim()) {
+                        fetch(`/optimization/${optimizationId}/save-prompt`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                name: promptName.trim()
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Optimized prompt saved successfully!');
+                                if (confirm('Go to prompts page to view it?')) {
+                                    window.location.href = '/prompts';
+                                }
+                            } else {
+                                alert('Error: ' + (data.error || 'Unknown error'));
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error saving prompt');
+                        });
+                    }
+                }
+            """)]
         )
 
     @app.get("/optimization/candidate/{optimization_id}/{candidate_index}")
@@ -731,7 +764,7 @@ def setup_optimization_routes(app):
             db = Database()
             optimization = db.get_optimization(optimization_id)
             
-            if not optimization or optimization['status'] != 'completed':
+            if not optimization or optimization['status'] != 'Completed':
                 return {"success": False, "error": "Original optimization not found or not completed"}
             
             # Get best candidate
@@ -776,6 +809,61 @@ def setup_optimization_routes(app):
             ], cwd=os.getcwd())
             
             return {"success": True, "new_optimization_id": new_optimization_id}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @app.post("/optimization/{optimization_id}/save-prompt")
+    async def save_optimized_prompt(request):
+        """Save the optimized prompt to prompts database"""
+        optimization_id = request.path_params['optimization_id']
+        
+        try:
+            data = await request.json()
+            prompt_name = data.get('name', '').strip()
+            
+            if not prompt_name:
+                return {"success": False, "error": "Prompt name is required"}
+            
+            db = Database()
+            optimization = db.get_optimization(optimization_id)
+            
+            if not optimization or optimization['status'] != 'Completed':
+                return {"success": False, "error": "Optimization not found or not completed"}
+            
+            # Get the optimized prompts from the same files used for display
+            opt_dir = f"optimized_prompts/{optimization_id}"
+            
+            system_prompt = ""
+            user_prompt = ""
+            
+            if os.path.exists(opt_dir):
+                try:
+                    if os.path.exists(f"{opt_dir}/system_prompt.txt"):
+                        with open(f"{opt_dir}/system_prompt.txt", 'r') as f:
+                            system_prompt = f.read().strip()
+                    
+                    if os.path.exists(f"{opt_dir}/user_prompt.txt"):
+                        with open(f"{opt_dir}/user_prompt.txt", 'r') as f:
+                            user_prompt = f.read().strip()
+                except Exception as e:
+                    return {"success": False, "error": f"Error reading prompt files: {str(e)}"}
+            
+            if not system_prompt and not user_prompt:
+                return {"success": False, "error": "No optimized prompts found in files"}
+            
+            print(f"🔍 DEBUG - System prompt length: {len(system_prompt)}")
+            print(f"🔍 DEBUG - User prompt length: {len(user_prompt)}")
+            
+            # Create the prompt in the prompts database
+            prompt_id = db.create_prompt(
+                name=prompt_name,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt
+            )
+            
+            print(f"✅ DEBUG - Created prompt with ID: {prompt_id}")
+            return {"success": True, "prompt_id": prompt_id}
             
         except Exception as e:
             return {"success": False, "error": str(e)}
