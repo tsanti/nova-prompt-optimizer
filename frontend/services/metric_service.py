@@ -28,8 +28,8 @@ class MetricService:
         """Generate MetricAdapter subclass code using Amazon Nova Premier"""
         
         
-        from prompt_templates import get_metric_code_prompt
-        prompt = get_metric_code_prompt(name, criteria)
+        from prompt_templates import PromptTemplates
+        prompt = PromptTemplates.metric_code_generation(name, criteria)
 
 
         try:
@@ -349,13 +349,13 @@ class {class_name}(MetricAdapter):
             
             # Sample dataset
             if dataset_path.endswith('.jsonl'):
-                with open(dataset_path, 'r') as f:
+                with open(dataset_path, 'r', encoding='utf-8', errors='ignore') as f:
                     data = [json.loads(line) for line in f]
                 if len(data) > sample_size:
                     data = random.sample(data, sample_size)
                 df = pd.DataFrame(data)
             else:
-                df = pd.read_csv(dataset_path)
+                df = pd.read_csv(dataset_path, encoding='utf-8', errors='ignore')
                 if len(df) > sample_size:
                     df = df.sample(n=sample_size)
             
@@ -399,6 +399,11 @@ AVAILABLE LIBRARIES (use these for advanced metrics):
 - Data: pandas (dataframes, data manipulation)
 - ML: sklearn.metrics (F1, precision, recall, kappa, etc.)
 
+FORBIDDEN LIBRARIES (DO NOT USE):
+- nltk (not available)
+- os, sys, subprocess (security risk)
+
+For text similarity, use simple string methods or implement basic edit distance with loops.
 Prefer advanced implementations when appropriate for better accuracy and performance.
 
 For each metric, provide:
@@ -657,12 +662,47 @@ Return your response in this JSON format:
                 raise ValueError(error_msg)
         
         # Check for forbidden imports
-        forbidden_imports = ['sklearn', 'numpy', 'pandas', 'statsmodels', 'scipy']
+        forbidden_imports = ['nltk', 'os', 'sys', 'subprocess', 'eval', 'exec']
         for forbidden in forbidden_imports:
             if f'import {forbidden}' in extracted_code or f'from {forbidden}' in extracted_code:
                 error_msg = f"Generated code contains forbidden import: {forbidden}"
                 print(f"❌ DEBUG - {error_msg}")
                 raise ValueError(error_msg)
+        
+        # Check for placeholder implementations
+        placeholder_patterns = [
+            'return 0.0',
+            'return 1.0',
+            '# Placeholder',
+            'pass',
+            'NotImplemented'
+        ]
+        
+        # Count methods that are just placeholders
+        method_lines = [line for line in extracted_code.split('\n') if line.strip().startswith('def _')]
+        placeholder_methods = []
+        
+        for i, line in enumerate(extracted_code.split('\n')):
+            if line.strip().startswith('def _') and not line.strip().startswith('def __'):
+                method_name = line.strip().split('(')[0].replace('def ', '')
+                # Look at the next few lines for placeholder patterns
+                method_content = '\n'.join(extracted_code.split('\n')[i:i+10])
+                
+                # Check if method only contains placeholder patterns
+                has_real_logic = False
+                for content_line in method_content.split('\n')[1:]:  # Skip the def line
+                    if content_line.strip() and not any(pattern in content_line for pattern in placeholder_patterns):
+                        if not content_line.strip().startswith(('def ', 'return', '#')):
+                            has_real_logic = True
+                            break
+                
+                if not has_real_logic:
+                    placeholder_methods.append(method_name)
+        
+        if len(placeholder_methods) > 1:  # Allow one placeholder, but not multiple
+            error_msg = f"Generated code contains too many placeholder methods: {placeholder_methods}. Metrics must have real implementations."
+            print(f"❌ DEBUG - {error_msg}")
+            raise ValueError(error_msg)
         
         # Final validation - try to compile the code
         try:
@@ -779,9 +819,11 @@ Return your response in this JSON format:
                 structure["field_types"]["urgency"] = "string" 
                 structure["sample_structure"]["urgency"] = "high"
         
-        # If no specific fields detected, fail with clear error
+        # If no specific fields detected, use generic structure for simple validation
         if not structure["fields"]:
-            raise ValueError("Could not detect dataset structure from metrics. Please provide more descriptive metric names/descriptions that indicate the data fields (e.g., 'sentiment', 'categories', 'urgency').")
+            structure["fields"] = ["prediction", "expected"]
+            structure["field_types"] = {"prediction": "string", "expected": "string"}
+            structure["sample_structure"] = {"prediction": "sample_output", "expected": "expected_output"}
         
         return structure
     

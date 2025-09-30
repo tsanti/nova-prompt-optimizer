@@ -13,8 +13,12 @@ boto3
 #pydantic
 pydantic_settings
 
-#feature
+# Data science and ML libraries
 pandas
+numpy
+scikit-learn
+scipy
+nltk
 
 # Basic Python libraries (built-in, no installation needed)
 # - json (built-in)
